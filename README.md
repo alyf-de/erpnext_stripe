@@ -2,6 +2,9 @@
 
 Sync Customers, Items and Invoices from Stripe to ERPNext
 
+> [!WARNING]
+> This app is still in development and not ready for production use.
+
 ### Installation
 
 You can install this app using the [bench](https://github.com/frappe/bench) CLI:
