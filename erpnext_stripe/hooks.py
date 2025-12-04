@@ -83,12 +83,12 @@ app_license = "gpl-3.0"
 # ------------
 
 # before_install = "erpnext_stripe.install.before_install"
-# after_install = "erpnext_stripe.install.after_install"
+after_install = "erpnext_stripe.install.after_install"
 
 # Uninstallation
 # ------------
 
-# before_uninstall = "erpnext_stripe.uninstall.before_uninstall"
+before_uninstall = "erpnext_stripe.uninstall.before_uninstall"
 # after_uninstall = "erpnext_stripe.uninstall.after_uninstall"
 
 # Integration Setup
@@ -236,7 +236,7 @@ app_license = "gpl-3.0"
 # ]
 
 # Automatically update python controller files with type annotations for this app.
-# export_python_type_annotations = True
+export_python_type_annotations = True
 
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
