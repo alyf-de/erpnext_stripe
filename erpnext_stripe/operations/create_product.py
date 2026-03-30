@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
 	from erpnext.stock.doctype.item.item import Item
-	from stripe._product import Product
+	from stripe import Product
 
 
 import frappe

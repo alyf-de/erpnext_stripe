@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
 	from erpnext.selling.doctype.customer.customer import Customer as ErpnextCustomer
-	from stripe._customer import Customer as StripeCustomer
+	from stripe import Customer as StripeCustomer
 
 
 import frappe
