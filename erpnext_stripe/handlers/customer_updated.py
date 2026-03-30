@@ -1,8 +1,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-	from erpnext.selling.doctype.customer.customer import Customer as ErpnextCustomer
-	from stripe import Customer as StripeCustomer
+	from stripe import Event
 
 
 import frappe
@@ -20,21 +19,25 @@ from erpnext_stripe.utils import (
 )
 
 
-def run(stripe_customer: "StripeCustomer", ignore_permissions: bool = False):
-	if frappe.db.exists("Customer", {"stripe_id": stripe_customer.id}):
-		return
-
-	customer_name = get_stripe_customer_name(stripe_customer) or stripe_customer.id
+def handle(event: "Event", ignore_permissions: bool = False):
+	stripe_customer = event.data.object
 	customer_address = get_stripe_customer_address(stripe_customer)
-	contact_name = get_stripe_customer_contact_name(stripe_customer)
+	contact_display_name = get_stripe_customer_contact_name(stripe_customer)
 	contact_phone = get_stripe_customer_phone(stripe_customer)
 	valid_email = get_valid_contact_email(stripe_customer.email)
 	if stripe_customer.email and not valid_email:
 		log_skipped_contact_email(stripe_customer.email, stripe_customer.id)
 
-	customer_doc: ErpnextCustomer = frappe.new_doc("Customer")
-	customer_doc.stripe_id = stripe_customer.id
-	customer_doc.customer_name = customer_name
+	customer_name = frappe.db.get_value("Customer", {"stripe_id": stripe_customer.id})
+	if not customer_name:
+		return
+
+	customer_doc = frappe.get_doc("Customer", customer_name)
+
+	if resolved_customer_name := get_stripe_customer_name(
+		stripe_customer, fallback_to_identifier=False
+	):
+		customer_doc.customer_name = resolved_customer_name
 
 	if hasattr(stripe_customer, "business_name") and stripe_customer.business_name:
 		customer_doc.customer_type = "Company"
@@ -57,24 +60,49 @@ def run(stripe_customer: "StripeCustomer", ignore_permissions: bool = False):
 	customer_doc.save(ignore_permissions=ignore_permissions)
 
 	if customer_address:
-		address_doc = frappe.new_doc("Address")
+		address_name = frappe.db.get_value(
+			"Dynamic Link",
+			{"link_doctype": "Customer", "link_name": customer_name, "parenttype": "Address"},
+			"parent",
+		)
+		if address_name:
+			address_doc = frappe.get_doc("Address", address_name)
+		else:
+			address_doc = frappe.new_doc("Address")
+			address_doc.append("links", {"link_doctype": "Customer", "link_name": customer_name})
+
 		address_doc.address_line1 = customer_address.line1
 		address_doc.address_line2 = customer_address.line2
 		address_doc.city = customer_address.city
 		address_doc.state = customer_address.state
 		address_doc.pincode = customer_address.postal_code
 		address_doc.country = get_country_name_by_code(customer_address.country)
-		address_doc.append("links", {"link_doctype": "Customer", "link_name": customer_doc.name})
 		address_doc.save(ignore_permissions=ignore_permissions)
 
 	if valid_email or contact_phone:
-		contact_doc = frappe.new_doc("Contact")
+		contact_docname = frappe.db.get_value(
+			"Dynamic Link",
+			{"link_doctype": "Customer", "link_name": customer_name, "parenttype": "Contact"},
+			"parent",
+		)
+		if contact_docname:
+			contact_doc = frappe.get_doc("Contact", contact_docname)
+		else:
+			contact_doc = frappe.new_doc("Contact")
+			contact_doc.append("links", {"link_doctype": "Customer", "link_name": customer_name})
+
 		contact_doc.company_name = customer_doc.customer_name
-		if contact_name:
-			contact_doc.first_name = contact_name
+		if contact_display_name:
+			contact_doc.first_name = contact_display_name
+
 		if valid_email:
-			contact_doc.append("email_ids", {"email_id": valid_email, "is_primary": 1})
+			existing_email = next((e for e in contact_doc.email_ids if e.email_id == valid_email), None)
+			if not existing_email:
+				contact_doc.append("email_ids", {"email_id": valid_email, "is_primary": 1})
+
 		if contact_phone:
-			contact_doc.append("phone_nos", {"phone": contact_phone, "is_primary_phone": 1})
-		contact_doc.append("links", {"link_doctype": "Customer", "link_name": customer_doc.name})
+			existing_phone = next((p for p in contact_doc.phone_nos if p.phone == contact_phone), None)
+			if not existing_phone:
+				contact_doc.append("phone_nos", {"phone": contact_phone, "is_primary_phone": 1})
+
 		contact_doc.save(ignore_permissions=ignore_permissions)

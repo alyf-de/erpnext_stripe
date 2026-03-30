@@ -9,7 +9,7 @@ import frappe
 import stripe
 
 
-def run(product: "Product"):
+def run(product: "Product", ignore_permissions: bool = False):
 	if frappe.db.exists("Item", {"stripe_id": product.id}):
 		return
 
@@ -50,7 +50,7 @@ def run(product: "Product"):
 
 	_apply_package_weight(item_doc, product)
 
-	item_doc.save()
+	item_doc.save(ignore_permissions=ignore_permissions)
 
 
 def _build_description(product: "Product") -> str:

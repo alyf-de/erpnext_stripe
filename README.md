@@ -22,6 +22,7 @@ Copy _Endpoint URL_ from **ERPNext Stripe Settings** and use it as the **Forward
 ```bash
 stripe login
 stripe listen --forward-to http://127.0.0.1:8006/api/method/erpnext_stripe.webhook.handler
+stripe trigger customer.created
 ```
 
 ### Contributing
