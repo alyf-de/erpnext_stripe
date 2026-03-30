@@ -15,6 +15,15 @@ bench get-app $URL_OF_THIS_REPO --branch develop
 bench install-app erpnext_stripe
 ```
 
+### Local testing
+
+Copy _Endpoint URL_ from **ERPNext Stripe Settings** and use it as the **Forward URL** in the Stripe CLI:
+
+```bash
+stripe login
+stripe listen --forward-to http://127.0.0.1:8006/api/method/erpnext_stripe.webhook.handler
+```
+
 ### Contributing
 
 This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
