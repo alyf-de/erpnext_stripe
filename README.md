@@ -15,6 +15,22 @@ bench get-app $URL_OF_THIS_REPO --branch develop
 bench install-app erpnext_stripe
 ```
 
+### Stripe API Key Permissions
+
+This app only reads from Stripe. When using a restricted API key, enable **Read** access for:
+
+- Customers
+- Products
+- Prices
+- Tax Rates
+
+Subscribe to the following webhook events in the Stripe Dashboard:
+
+- `customer.created`
+- `customer.updated`
+- `invoice.finalized`
+- `invoice.paid`
+
 ### Local testing
 
 Copy _Endpoint URL_ from **ERPNext Stripe Settings** and use it as the **Forward URL** in the Stripe CLI:
