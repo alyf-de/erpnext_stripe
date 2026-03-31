@@ -31,6 +31,42 @@ Subscribe to the following webhook events in the Stripe Dashboard:
 - `invoice.finalized`
 - `invoice.paid`
 
+### Setup
+
+1. Open **ERPNext Stripe Settings** and enter your Stripe API key.
+2. Click **Import > Tax Rates** to fetch your Stripe tax rates. Set the ERPNext **Account** for each rate and save.
+3. Click **Import > Products** to import your Stripe products as ERPNext Items.
+4. Click **Import > Customers** to import existing Stripe customers as ERPNext Customers.
+5. Configure the webhook in Stripe Dashboard (the endpoint URL is shown in the settings form). Copy the webhook signing secret into **Webhook Secret** and save.
+
+### Payment Reconciliation
+
+Stripe acts as an intermediary bank account. Set up a **Bank Account** in ERPNext (e.g. "Stripe") with a dedicated GL account and configure it as the **Stripe Bank Account** in ERPNext Stripe Settings.
+
+**Automated by this app:**
+
+When a customer pays a Stripe invoice (`invoice.paid`), the app creates a Payment Entry:
+- Debit: Stripe Bank Account
+- Credit: Accounts Receivable
+
+**Handled manually:**
+
+When Stripe pays out to your real bank account, create a Journal Entry:
+
+| Account | Debit | Credit |
+|---|---|---|
+| Real Bank Account | payout amount | |
+| Stripe Bank Account | | payout amount |
+
+When Stripe charges fees (deducted from your balance), create a Journal Entry:
+
+| Account | Debit | Credit |
+|---|---|---|
+| Stripe Fees (Expense) | fee amount | |
+| Stripe Bank Account | | fee amount |
+
+The Stripe Bank Account balance in ERPNext should match your actual Stripe balance.
+
 ### Local testing
 
 Copy _Endpoint URL_ from **ERPNext Stripe Settings** and use it as the **Forward URL** in the Stripe CLI:
