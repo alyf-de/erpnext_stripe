@@ -36,7 +36,8 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 
 	_ensure_customer(invoice.customer, ignore_permissions=ignore_permissions)
 
-	tax_config = _get_tax_config()
+	settings = frappe.get_single("ERPNext Stripe Settings")
+	tax_config = _get_tax_config(settings)
 
 	invoice_doc: SalesInvoice = frappe.new_doc("Sales Invoice")
 	invoice_doc.stripe_id = invoice.id
@@ -45,6 +46,8 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 		invoice_doc.flags.name_set = True
 	invoice_doc.due_date = invoice.due_date or today()
 	invoice_doc.customer = frappe.db.get_value("Customer", {"stripe_id": invoice.customer})
+	invoice_doc.project = settings.project
+	invoice_doc.selling_price_list = settings.price_list
 
 	for line in invoice.lines.data:
 		product_id = line.price.product
@@ -126,8 +129,7 @@ def _ensure_customer(stripe_customer_id: str, ignore_permissions: bool = False):
 		create_customer(stripe_customer, ignore_permissions=ignore_permissions)
 
 
-def _get_tax_config() -> dict:
-	settings = frappe.get_single("ERPNext Stripe Settings")
+def _get_tax_config(settings) -> dict:
 	return {row.stripe_id: row for row in settings.tax_configurations if row.stripe_id}
 
 

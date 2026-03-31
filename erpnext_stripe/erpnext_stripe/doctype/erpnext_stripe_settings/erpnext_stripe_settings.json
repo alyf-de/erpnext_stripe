@@ -10,6 +10,8 @@
   "endpoint_url",
   "webhook_secret",
   "taxes_section",
+  "project",
+  "price_list",
   "tax_configurations",
   "payments_section",
   "stripe_bank_account"
@@ -52,19 +54,33 @@
   {
    "fieldname": "taxes_section",
    "fieldtype": "Section Break",
-   "label": "Taxes"
+   "label": "Invoice"
   },
   {
    "fieldname": "tax_configurations",
    "fieldtype": "Table",
+   "label": "Tax Configurations",
    "options": "ERPNext Stripe Tax Config"
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project"
+  },
+  {
+   "fieldname": "price_list",
+   "fieldtype": "Link",
+   "label": "Price List",
+   "link_filters": "[[\"Price List\",\"selling\",\"=\",1]]",
+   "options": "Price List"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-31 02:15:01.847508",
+ "modified": "2026-03-31 04:39:44.763972",
  "modified_by": "Administrator",
  "module": "ERPNext Stripe",
  "name": "ERPNext Stripe Settings",

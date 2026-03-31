@@ -20,6 +20,8 @@ class ERPNextStripeSettings(Document):
 
 		api_key: DF.Password
 		endpoint_url: DF.Data | None
+		price_list: DF.Link | None
+		project: DF.Link | None
 		stripe_bank_account: DF.Link | None
 		tax_configurations: DF.Table[ERPNextStripeTaxConfig]
 		webhook_secret: DF.Password | None
