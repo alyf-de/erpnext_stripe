@@ -40,7 +40,9 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 
 	invoice_doc: SalesInvoice = frappe.new_doc("Sales Invoice")
 	invoice_doc.stripe_id = invoice.id
-	invoice_doc.name = invoice.number
+	if invoice.number:
+		invoice_doc.name = invoice.number
+		invoice_doc.flags.name_set = True
 	invoice_doc.due_date = invoice.due_date or today()
 	invoice_doc.customer = frappe.db.get_value("Customer", {"stripe_id": invoice.customer})
 
