@@ -19,7 +19,7 @@ def list_customers():
 			"stripe_id": customer.id,
 			"name": getattr(customer, "name", None) or getattr(customer, "email", None) or customer.id,
 			"email": getattr(customer, "email", None),
-			"currency": getattr(customer, "currency", "").upper() or None,
+			"currency": (getattr(customer, "currency", None) or "").upper() or None,
 			"existing_customer": None,
 		}
 		for customer in customers
