@@ -18,6 +18,13 @@ frappe.ui.form.on("ERPNext Stripe Settings", {
 				},
 				__("Import")
 			);
+			frm.add_custom_button(
+				__("Tax Rates"),
+				() => {
+					frm.trigger("import_tax_rates");
+				},
+				__("Import")
+			);
 		}
 	},
 
@@ -82,6 +89,56 @@ frappe.ui.form.on("ERPNext Stripe Settings", {
 				},
 			],
 		});
+	},
+
+	import_tax_rates(frm) {
+		frappe.dom.freeze(__("Loading tax rates..."));
+		frappe
+			.xcall("erpnext_stripe.api.get_tax_rates")
+			.then((rates) => {
+				if (!rates?.length) {
+					frappe.msgprint(__("No tax rates found in Stripe."));
+					return;
+				}
+
+				const existing_ids = new Set(
+					(frm.doc.tax_configurations || []).map((row) => row.stripe_id)
+				);
+
+				let added = 0;
+				for (const rate of rates) {
+					if (existing_ids.has(rate.stripe_id)) {
+						continue;
+					}
+					const row = frm.add_child("tax_configurations");
+					row.stripe_id = rate.stripe_id;
+					row.region = rate.region;
+					row.rate = rate.rate;
+					row.calculation = rate.inclusive ? "Inclusive" : "Exclusive";
+					added++;
+				}
+
+				if (added === 0) {
+					frappe.msgprint(__("All Stripe tax rates are already imported."));
+					return;
+				}
+
+				frm.refresh_field("tax_configurations");
+				frm.dirty();
+				frappe.show_alert({
+					message: __("{0} tax rate(s) added. Set the Account for each and save.", [added]),
+					indicator: "green",
+				});
+			})
+			.catch(() => {
+				frappe.show_alert({
+					message: __("Error fetching tax rates"),
+					indicator: "red",
+				});
+			})
+			.finally(() => {
+				frappe.dom.unfreeze();
+			});
 	},
 
 	import_products() {

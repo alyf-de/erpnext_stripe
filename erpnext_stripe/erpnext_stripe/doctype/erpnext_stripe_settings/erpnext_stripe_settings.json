@@ -9,6 +9,8 @@
   "webhook_section",
   "endpoint_url",
   "webhook_secret",
+  "taxes_section",
+  "tax_configurations",
   "payments_section",
   "stripe_bank_account"
  ],
@@ -46,13 +48,23 @@
    "fieldtype": "Link",
    "label": "Stripe Bank Account",
    "options": "Bank Account"
+  },
+  {
+   "fieldname": "taxes_section",
+   "fieldtype": "Section Break",
+   "label": "Taxes"
+  },
+  {
+   "fieldname": "tax_configurations",
+   "fieldtype": "Table",
+   "options": "ERPNext Stripe Tax Config"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-12-04 02:50:28.942244",
+ "modified": "2026-03-31 02:15:01.847508",
  "modified_by": "Administrator",
  "module": "ERPNext Stripe",
  "name": "ERPNext Stripe Settings",

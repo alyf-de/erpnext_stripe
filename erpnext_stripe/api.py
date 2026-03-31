@@ -88,17 +88,25 @@ def import_products(product_ids: str | None = None, products: str | None = None)
 		create_product(stripe.Product.retrieve(product["stripe_id"]))
 
 
-@frappe.whitelist(methods=["GET"])
+@frappe.whitelist(methods=["POST"])
 def get_tax_rates():
 	init_stripe()
 	rates = []
 
 	for tax_rate in stripe.TaxRate.list():
+		region_parts = [
+			getattr(tax_rate, "country", None),
+			getattr(tax_rate, "state", None),
+			getattr(tax_rate, "jurisdiction", None),
+		]
+		region = " - ".join(part for part in region_parts if part)
+
 		rates.append({
 			"stripe_id": tax_rate.id,
-			"country": tax_rate.country,
+			"region": region or getattr(tax_rate, "display_name", None) or tax_rate.description,
 			"description": tax_rate.description,
 			"rate": tax_rate.percentage,
+			"inclusive": tax_rate.inclusive,
 		})
 
 	return rates

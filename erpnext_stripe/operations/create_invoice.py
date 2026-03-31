@@ -1,0 +1,155 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+	from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
+	from stripe import Invoice as StripeInvoice
+
+
+import requests
+
+import frappe
+import stripe
+from frappe.utils.data import today
+
+from erpnext_stripe.operations.create_customer import run as create_customer
+from erpnext_stripe.operations.create_product import run as create_product
+
+
+def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
+	if frappe.db.exists("Sales Invoice", {"stripe_id": invoice.id}):
+		return
+
+	if not frappe.db.exists("Customer", {"stripe_id": invoice.customer}):
+		try:
+			stripe_customer = stripe.Customer.retrieve(invoice.customer)
+		except stripe.InvalidRequestError:
+			frappe.throw(f"Customer {invoice.customer} not found in Stripe")
+		create_customer(stripe_customer, ignore_permissions=ignore_permissions)
+
+	tax_config = _get_tax_config()
+
+	invoice_doc: SalesInvoice = frappe.new_doc("Sales Invoice")
+	invoice_doc.stripe_id = invoice.id
+	invoice_doc.name = invoice.number
+	invoice_doc.due_date = invoice.due_date or today()
+	invoice_doc.customer = frappe.db.get_value("Customer", {"stripe_id": invoice.customer})
+
+	for line in invoice.lines.data:
+		product_id = line.price.product
+		if not frappe.db.exists("Item", {"stripe_id": product_id}):
+			try:
+				stripe_product = stripe.Product.retrieve(product_id)
+			except stripe.InvalidRequestError:
+				stripe_product = None
+
+			if stripe_product:
+				create_product(stripe_product, ignore_permissions=ignore_permissions)
+			else:
+				_create_minimal_item(product_id, line, ignore_permissions=ignore_permissions)
+
+		item_code = frappe.db.get_value("Item", {"stripe_id": product_id})
+
+		amount_excluding_tax = getattr(line, "amount_excluding_tax", None)
+		if amount_excluding_tax is not None:
+			rate = amount_excluding_tax / 100 / (line.quantity or 1)
+		else:
+			rate = line.price.unit_amount / 100
+
+		invoice_doc.append("items", {
+			"item_code": item_code,
+			"qty": line.quantity,
+			"rate": rate,
+		})
+
+	for tax in getattr(invoice, "total_tax_amounts", None) or []:
+		tax_rate_id = _get_tax_rate_id(tax)
+		if not tax_rate_id:
+			continue
+
+		config = tax_config.get(tax_rate_id)
+		if not config:
+			frappe.throw(
+				f"No tax configuration found for Stripe tax rate {tax_rate_id}. "
+				"Please import it in ERPNext Stripe Settings."
+			)
+
+		invoice_doc.append("taxes", {
+			"charge_type": "Actual",
+			"account_head": config.account,
+			"tax_amount": tax.amount / 100,
+			"description": config.region or tax_rate_id,
+			"cost_center": "",
+		})
+
+	invoice_doc.set_missing_values()
+	invoice_doc.save(ignore_permissions=ignore_permissions)
+
+	try:
+		invoice_doc.flags.ignore_permissions = ignore_permissions
+		invoice_doc.submit()
+	except Exception:
+		frappe.log_error(title="Stripe Invoice: Submit Error")
+
+	_attach_invoice_pdf(invoice, invoice_doc)
+
+
+def _get_tax_config() -> dict:
+	settings = frappe.get_single("ERPNext Stripe Settings")
+	return {row.stripe_id: row for row in settings.tax_configurations if row.stripe_id}
+
+
+def _get_tax_rate_id(tax) -> str | None:
+	"""Extract the tax rate ID from a total_tax_amounts entry."""
+	# total_tax_amounts[].tax_rate is the tax rate ID string or object
+	tax_rate = getattr(tax, "tax_rate", None)
+	if not tax_rate:
+		return None
+
+	if isinstance(tax_rate, str):
+		return tax_rate
+
+	return getattr(tax_rate, "id", None)
+
+
+def _create_minimal_item(product_id: str, line, ignore_permissions: bool = False):
+	"""Create a minimal Item from invoice line data when the product can't be fetched from Stripe."""
+	from erpnext_stripe.operations.create_product import _resolve_item_group, _resolve_stock_uom
+
+	item_doc = frappe.new_doc("Item")
+	item_doc.stripe_id = product_id
+	item_doc.item_code = product_id
+	item_doc.item_name = getattr(line, "description", None) or product_id
+
+	if item_group := _resolve_item_group():
+		item_doc.item_group = item_group
+
+	if stock_uom := _resolve_stock_uom():
+		item_doc.stock_uom = stock_uom
+
+	item_doc.is_stock_item = 0
+	item_doc.is_sales_item = 1
+	item_doc.save(ignore_permissions=ignore_permissions)
+
+
+def _attach_invoice_pdf(invoice: "StripeInvoice", invoice_doc: "SalesInvoice"):
+	"""Download the Stripe invoice PDF and attach it to the Sales Invoice."""
+	invoice_pdf_url = getattr(invoice, "invoice_pdf", None)
+	if not invoice_pdf_url:
+		return
+
+	try:
+		response = requests.get(invoice_pdf_url, timeout=30)
+		response.raise_for_status()
+	except Exception:
+		frappe.log_error(title="Stripe Invoice: PDF Download Error")
+		return
+
+	filename = f"{invoice.number or invoice.id}.pdf"
+
+	file_doc = frappe.new_doc("File")
+	file_doc.file_name = filename
+	file_doc.content = response.content
+	file_doc.attached_to_doctype = "Sales Invoice"
+	file_doc.attached_to_name = invoice_doc.name
+	file_doc.is_private = 1
+	file_doc.save(ignore_permissions=True)

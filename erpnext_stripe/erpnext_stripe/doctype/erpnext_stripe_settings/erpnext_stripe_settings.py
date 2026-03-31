@@ -14,9 +14,14 @@ class ERPNextStripeSettings(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		from erpnext_stripe.erpnext_stripe.doctype.erpnext_stripe_tax_config.erpnext_stripe_tax_config import (
+			ERPNextStripeTaxConfig,
+		)
+
 		api_key: DF.Password
 		endpoint_url: DF.Data | None
 		stripe_bank_account: DF.Link | None
+		tax_configurations: DF.Table[ERPNextStripeTaxConfig]
 		webhook_secret: DF.Password | None
 	# end: auto-generated types
 	def validate(self):

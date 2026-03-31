@@ -1,0 +1,68 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-03-31 02:10:16.511667",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "stripe_id",
+  "region",
+  "rate",
+  "calculation",
+  "account"
+ ],
+ "fields": [
+  {
+   "fieldname": "stripe_id",
+   "fieldtype": "Data",
+   "label": "Stripe ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Rate",
+   "read_only": 1
+  },
+  {
+   "fieldname": "calculation",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Calculation",
+   "options": "Exclusive\nInclusive",
+   "read_only": 1
+  },
+  {
+   "fieldname": "account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Account",
+   "link_filters": "[[\"Account\",\"account_type\",\"=\",\"Tax\"]]",
+   "options": "Account"
+  },
+  {
+   "fieldname": "region",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Region",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-03-31 02:23:14.659688",
+ "modified_by": "Administrator",
+ "module": "ERPNext Stripe",
+ "name": "ERPNext Stripe Tax Config",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

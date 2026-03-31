@@ -6,8 +6,8 @@ import stripe
 EVENT_HANDLERS = {
 	"customer.created": "customer_created",
 	"customer.updated": "customer_updated",
-	# "invoice.finalized": "invoice_finalized",
-	# "invoice.paid": "invoice_paid",
+	"invoice.finalized": "invoice_finalized",
+	"invoice.paid": "invoice_paid",
 }
 
 
@@ -36,7 +36,7 @@ def handler():
 			return {"success": False}
 
 	if not event or event["type"] not in EVENT_HANDLERS:
-		frappe.log_error(title="Stripe Webhook: Unhandled Event Type")
+		frappe.log_error(title=f"Stripe Webhook: Unhandled Event Type {event['type'] if event else 'None'}")
 		return {"success": False}
 
 	handler_file = EVENT_HANDLERS[event["type"]]
