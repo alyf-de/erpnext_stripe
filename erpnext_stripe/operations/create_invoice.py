@@ -72,6 +72,9 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 		})
 
 	for tax in getattr(invoice, "total_tax_amounts", None) or []:
+		if not tax.amount:
+			continue
+
 		tax_rate_id = _get_tax_rate_id(tax)
 		if not tax_rate_id:
 			continue
