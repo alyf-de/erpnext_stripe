@@ -33,4 +33,10 @@ def get_custom_fields():
 				**stripe_id_field,
 			},
 		],
+		"Lead": [
+			{
+				"insert_after": "lead_name",
+				**stripe_id_field,
+			},
+		],
 	}

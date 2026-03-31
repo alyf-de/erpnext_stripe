@@ -5,13 +5,13 @@ if TYPE_CHECKING:
 	from stripe import Invoice as StripeInvoice
 
 
-import requests
-
 import frappe
+import requests
 import stripe
 from frappe.utils.data import today
 
 from erpnext_stripe.operations.create_customer import run as create_customer
+from erpnext_stripe.operations.create_lead import run as create_lead
 from erpnext_stripe.operations.create_product import run as create_product
 
 
@@ -19,12 +19,22 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 	if frappe.db.exists("Sales Invoice", {"stripe_id": invoice.id}):
 		return
 
-	if not frappe.db.exists("Customer", {"stripe_id": invoice.customer}):
-		try:
-			stripe_customer = stripe.Customer.retrieve(invoice.customer)
-		except stripe.InvalidRequestError:
-			frappe.throw(f"Customer {invoice.customer} not found in Stripe")
-		create_customer(stripe_customer, ignore_permissions=ignore_permissions)
+	is_trial = not invoice.total
+
+	if is_trial:
+		# Ensure a Lead exists for this Stripe customer, then skip the invoice
+		if not frappe.db.exists("Lead", {"stripe_id": invoice.customer}) and not frappe.db.exists(
+			"Customer", {"stripe_id": invoice.customer}
+		):
+			try:
+				stripe_customer = stripe.Customer.retrieve(invoice.customer)
+			except stripe.InvalidRequestError:
+				frappe.log_error(title=f"Stripe Invoice: Customer {invoice.customer} not found")
+				return
+			create_lead(stripe_customer, ignore_permissions=ignore_permissions)
+		return
+
+	_ensure_customer(invoice.customer, ignore_permissions=ignore_permissions)
 
 	tax_config = _get_tax_config()
 
@@ -91,6 +101,24 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 		frappe.log_error(title="Stripe Invoice: Submit Error")
 
 	_attach_invoice_pdf(invoice, invoice_doc)
+
+
+def _ensure_customer(stripe_customer_id: str, ignore_permissions: bool = False):
+	"""Ensure a Customer exists for the given Stripe customer ID, promoting from Lead if needed."""
+	if frappe.db.exists("Customer", {"stripe_id": stripe_customer_id}):
+		return
+
+	try:
+		stripe_customer = stripe.Customer.retrieve(stripe_customer_id)
+	except stripe.InvalidRequestError:
+		frappe.throw(f"Customer {stripe_customer_id} not found in Stripe")
+
+	lead_name = frappe.db.get_value("Lead", {"stripe_id": stripe_customer_id})
+	if lead_name:
+		# Promote Lead to Customer: create Customer with lead_name link
+		create_customer(stripe_customer, ignore_permissions=ignore_permissions, lead_name=lead_name)
+	else:
+		create_customer(stripe_customer, ignore_permissions=ignore_permissions)
 
 
 def _get_tax_config() -> dict:

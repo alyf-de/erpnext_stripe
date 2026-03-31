@@ -20,7 +20,11 @@ from erpnext_stripe.utils import (
 )
 
 
-def run(stripe_customer: "StripeCustomer", ignore_permissions: bool = False):
+def run(
+	stripe_customer: "StripeCustomer",
+	ignore_permissions: bool = False,
+	lead_name: str | None = None,
+):
 	if frappe.db.exists("Customer", {"stripe_id": stripe_customer.id}):
 		return
 
@@ -35,6 +39,9 @@ def run(stripe_customer: "StripeCustomer", ignore_permissions: bool = False):
 	customer_doc: ErpnextCustomer = frappe.new_doc("Customer")
 	customer_doc.stripe_id = stripe_customer.id
 	customer_doc.customer_name = customer_name
+
+	if lead_name:
+		customer_doc.lead_name = lead_name
 
 	if hasattr(stripe_customer, "business_name") and stripe_customer.business_name:
 		customer_doc.customer_type = "Company"
