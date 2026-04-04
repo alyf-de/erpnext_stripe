@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 import frappe
 import requests
 import stripe
-from frappe.utils.data import today
+from frappe.utils.data import flt, today
 
 from erpnext_stripe.operations.create_customer import run as create_customer
 from erpnext_stripe.operations.create_lead import run as create_lead
@@ -50,7 +50,7 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 	invoice_doc.selling_price_list = settings.price_list
 
 	for line in invoice.lines.data:
-		product_id = line.price.product
+		product_id = _get_product_id(line)
 		if not frappe.db.exists("Item", {"stripe_id": product_id}):
 			try:
 				stripe_product = stripe.Product.retrieve(product_id)
@@ -63,16 +63,12 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 				_create_minimal_item(product_id, line, ignore_permissions=ignore_permissions)
 
 		item_code = frappe.db.get_value("Item", {"stripe_id": product_id})
-
-		amount_excluding_tax = getattr(line, "amount_excluding_tax", None)
-		if amount_excluding_tax is not None:
-			rate = amount_excluding_tax / 100 / (line.quantity or 1)
-		else:
-			rate = line.price.unit_amount / 100
+		quantity = _get_quantity(line)
+		rate = _get_rate(line, quantity)
 
 		invoice_doc.append("items", {
 			"item_code": item_code,
-			"qty": line.quantity,
+			"qty": quantity,
 			"rate": rate,
 		})
 
@@ -109,6 +105,44 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 		frappe.log_error(title="Stripe Invoice: Submit Error")
 
 	_attach_invoice_pdf(invoice, invoice_doc)
+
+
+def _get_product_id(line) -> str:
+	price_details = getattr(getattr(line, "pricing", None), "price_details", None)
+	if product_id := getattr(price_details, "product", None):
+		return product_id
+
+	price = getattr(line, "price", None)
+	if product_id := getattr(price, "product", None):
+		return product_id
+
+	frappe.throw(f"Stripe invoice line {line.id} has no product in its pricing data.")
+
+
+def _get_quantity(line) -> float:
+	quantity = getattr(line, "quantity_decimal", None)
+	if quantity is None:
+		quantity = getattr(line, "quantity", None)
+
+	return flt(quantity or 1)
+
+
+def _get_rate(line, quantity: float) -> float:
+	amount_excluding_tax = getattr(line, "amount_excluding_tax", None)
+	if amount_excluding_tax is not None:
+		return flt(amount_excluding_tax / 100 / quantity)
+
+	pricing = getattr(line, "pricing", None)
+	unit_amount_decimal = getattr(pricing, "unit_amount_decimal", None)
+	if unit_amount_decimal is not None:
+		return flt(unit_amount_decimal / 100)
+
+	price = getattr(line, "price", None)
+	unit_amount = getattr(price, "unit_amount", None)
+	if unit_amount is not None:
+		return flt(unit_amount / 100)
+
+	frappe.throw(f"Stripe invoice line {line.id} has no unit amount in its pricing data.")
 
 
 def _ensure_customer(stripe_customer_id: str, ignore_permissions: bool = False):
