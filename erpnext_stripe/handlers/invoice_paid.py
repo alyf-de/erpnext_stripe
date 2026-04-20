@@ -51,6 +51,6 @@ def handle(event: "Event", ignore_permissions: bool = False):
 		},
 	)
 
-	payment_entry.save(ignore_permissions=ignore_permissions)
 	payment_entry.flags.ignore_permissions = ignore_permissions
+	payment_entry.save(ignore_permissions=ignore_permissions)
 	payment_entry.submit()

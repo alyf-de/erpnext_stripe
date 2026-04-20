@@ -95,11 +95,11 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 			"cost_center": "",
 		})
 
+	invoice_doc.flags.ignore_permissions = ignore_permissions
 	invoice_doc.set_missing_values()
 	invoice_doc.save(ignore_permissions=ignore_permissions)
 
 	try:
-		invoice_doc.flags.ignore_permissions = ignore_permissions
 		invoice_doc.submit()
 	except Exception:
 		frappe.log_error(title="Stripe Invoice: Submit Error")
