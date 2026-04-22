@@ -63,6 +63,7 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 				_create_minimal_item(product_id, line, ignore_permissions=ignore_permissions)
 
 		item_code = frappe.db.get_value("Item", {"stripe_id": product_id})
+		_ensure_sales_item(item_code, ignore_permissions=ignore_permissions)
 		quantity = _get_quantity(line)
 		rate = _get_rate(line, quantity)
 
@@ -196,6 +197,19 @@ def _create_minimal_item(product_id: str, line, ignore_permissions: bool = False
 		item_doc.stock_uom = stock_uom
 
 	item_doc.is_stock_item = 0
+	item_doc.is_sales_item = 1
+	item_doc.save(ignore_permissions=ignore_permissions)
+
+
+def _ensure_sales_item(item_code: str, ignore_permissions: bool = False):
+	"""Any Item linked to a Stripe product must be a sales item, since it appears on Stripe invoices.
+
+	This corrects existing Items that were linked (e.g. manually) without the flag set.
+	"""
+	if frappe.db.get_value("Item", item_code, "is_sales_item"):
+		return
+
+	item_doc = frappe.get_doc("Item", item_code)
 	item_doc.is_sales_item = 1
 	item_doc.save(ignore_permissions=ignore_permissions)
 

@@ -22,6 +22,7 @@ def run(product: "Product", ignore_permissions: bool = False):
 	item_doc.item_name = product.name or item_doc.item_code
 	item_doc.description = _build_description(product)
 	item_doc.disabled = 0 if getattr(product, "active", True) else 1
+	item_doc.is_sales_item = 1
 
 	if item_group := _resolve_item_group():
 		item_doc.item_group = item_group
