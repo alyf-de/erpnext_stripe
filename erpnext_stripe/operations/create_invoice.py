@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 import frappe
 import requests
 import stripe
+from frappe import _
 from frappe.utils.data import flt, today
 
 from erpnext_stripe.operations.create_customer import run as create_customer
@@ -38,6 +39,7 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 
 	settings = frappe.get_single("ERPNext Stripe Settings")
 	tax_config = _get_tax_config(settings)
+	tax_rows = _get_invoice_tax_rows(invoice, tax_config)
 
 	invoice_doc: SalesInvoice = frappe.new_doc("Sales Invoice")
 	invoice_doc.stripe_id = invoice.id
@@ -73,25 +75,11 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 			"rate": rate,
 		})
 
-	for tax in getattr(invoice, "total_tax_amounts", None) or []:
-		if not tax.amount:
-			continue
-
-		tax_rate_id = _get_tax_rate_id(tax)
-		if not tax_rate_id:
-			continue
-
-		config = tax_config.get(tax_rate_id)
-		if not config:
-			frappe.throw(
-				f"No tax configuration found for Stripe tax rate {tax_rate_id}. "
-				"Please import it in ERPNext Stripe Settings."
-			)
-
+	for tax_rate_id, config in tax_rows:
 		invoice_doc.append("taxes", {
-			"charge_type": "Actual",
+			"charge_type": "On Net Total",
 			"account_head": config.account,
-			"tax_amount": tax.amount / 100,
+			"rate": flt(config.rate),
 			"description": config.region or tax_rate_id,
 			"cost_center": "",
 		})
@@ -117,7 +105,7 @@ def _get_product_id(line) -> str:
 	if product_id := getattr(price, "product", None):
 		return product_id
 
-	frappe.throw(f"Stripe invoice line {line.id} has no product in its pricing data.")
+	frappe.throw(_("Stripe invoice line {0} has no product in its pricing data.").format(line.id))
 
 
 def _get_quantity(line) -> float:
@@ -136,14 +124,14 @@ def _get_rate(line, quantity: float) -> float:
 	pricing = getattr(line, "pricing", None)
 	unit_amount_decimal = getattr(pricing, "unit_amount_decimal", None)
 	if unit_amount_decimal is not None:
-		return flt(unit_amount_decimal / 100)
+		return flt(unit_amount_decimal) / 100
 
 	price = getattr(line, "price", None)
 	unit_amount = getattr(price, "unit_amount", None)
 	if unit_amount is not None:
 		return flt(unit_amount / 100)
 
-	frappe.throw(f"Stripe invoice line {line.id} has no unit amount in its pricing data.")
+	frappe.throw(_("Stripe invoice line {0} has no unit amount in its pricing data.").format(line.id))
 
 
 def _ensure_customer(stripe_customer_id: str, ignore_permissions: bool = False):
@@ -154,7 +142,7 @@ def _ensure_customer(stripe_customer_id: str, ignore_permissions: bool = False):
 	try:
 		stripe_customer = stripe.Customer.retrieve(stripe_customer_id)
 	except stripe.InvalidRequestError:
-		frappe.throw(f"Customer {stripe_customer_id} not found in Stripe")
+		frappe.throw(_("Customer {0} not found in Stripe").format(stripe_customer_id))
 
 	lead_name = frappe.db.get_value("Lead", {"stripe_id": stripe_customer_id})
 	if lead_name:
@@ -168,12 +156,52 @@ def _get_tax_config(settings) -> dict:
 	return {row.stripe_id: row for row in settings.tax_configurations if row.stripe_id}
 
 
+def _get_invoice_tax_rows(invoice: "StripeInvoice", tax_config: dict) -> list[tuple[str, object]]:
+	tax_rows = []
+	seen = set()
+
+	for tax in _get_tax_entries(invoice, "total_tax_amounts", "total_taxes"):
+		if not tax.amount:
+			continue
+
+		tax_rate_id = _get_tax_rate_id(tax)
+		if not tax_rate_id or tax_rate_id in seen:
+			continue
+
+		config = tax_config.get(tax_rate_id)
+		if not config:
+			frappe.throw(
+				_(
+					"No tax configuration found for Stripe tax rate {0}. "
+					"Please import it in ERPNext Stripe Settings."
+				).format(tax_rate_id)
+			)
+
+		if not config.account:
+			frappe.throw(
+				_("No ERPNext tax account configured for Stripe tax rate {0}.").format(tax_rate_id)
+			)
+
+		tax_rows.append((tax_rate_id, config))
+		seen.add(tax_rate_id)
+
+	return tax_rows
+
+
+def _get_tax_entries(source, *fieldnames: str):
+	for fieldname in fieldnames:
+		if entries := getattr(source, fieldname, None):
+			return entries
+
+	return []
+
+
 def _get_tax_rate_id(tax) -> str | None:
-	"""Extract the tax rate ID from a total_tax_amounts entry."""
-	# total_tax_amounts[].tax_rate is the tax rate ID string or object
+	"""Extract the tax rate ID from current and legacy Stripe tax entry shapes."""
 	tax_rate = getattr(tax, "tax_rate", None)
 	if not tax_rate:
-		return None
+		tax_rate_details = getattr(tax, "tax_rate_details", None)
+		tax_rate = getattr(tax_rate_details, "tax_rate", None)
 
 	if isinstance(tax_rate, str):
 		return tax_rate

@@ -1,8 +1,15 @@
 import unittest
+from types import SimpleNamespace
 
 import stripe
 
-from erpnext_stripe.operations.create_invoice import _get_product_id, _get_quantity, _get_rate
+from erpnext_stripe.operations.create_invoice import (
+	_get_invoice_tax_rows,
+	_get_product_id,
+	_get_quantity,
+	_get_rate,
+	_get_tax_rate_id,
+)
 
 
 def _line_item(**values):
@@ -15,6 +22,19 @@ def _line_item(**values):
 		},
 		None,
 	)
+
+
+def _stripe_object(**values):
+	for key, value in values.items():
+		if isinstance(value, dict):
+			values[key] = _stripe_object(**value)
+		elif isinstance(value, list):
+			values[key] = [
+				_stripe_object(**entry) if isinstance(entry, dict) else entry
+				for entry in value
+			]
+
+	return SimpleNamespace(**values)
 
 
 class TestCreateInvoice(unittest.TestCase):
@@ -71,3 +91,25 @@ class TestCreateInvoice(unittest.TestCase):
 
 		self.assertAlmostEqual(quantity, 0.5)
 		self.assertAlmostEqual(_get_rate(line, quantity), 29.84)
+
+	def test_reads_current_total_tax_shape(self):
+		tax = _stripe_object(
+			amount=475,
+			tax_rate_details={"tax_rate": "txr_current"},
+		)
+
+		self.assertEqual(_get_tax_rate_id(tax), "txr_current")
+
+	def test_builds_tax_rows_from_total_taxes(self):
+		invoice = _stripe_object(
+			total_taxes=[
+				{
+					"amount": 475,
+					"tax_rate_details": {"tax_rate": "txr_19"},
+				}
+			]
+		)
+		config = _stripe_object(account="VAT 19", rate=19, region="DE")
+
+		self.assertEqual(_get_invoice_tax_rows(invoice, {"txr_19": config}), [("txr_19", config)])
+
