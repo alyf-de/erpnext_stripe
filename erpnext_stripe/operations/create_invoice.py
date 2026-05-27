@@ -14,6 +14,11 @@ from frappe.utils.data import flt, today
 from erpnext_stripe.operations.create_customer import run as create_customer
 from erpnext_stripe.operations.create_lead import run as create_lead
 from erpnext_stripe.operations.create_product import run as create_product
+from erpnext_stripe.tax_rates import (
+	get_tax_rate_calculation,
+	get_tax_rate_percentage,
+	get_tax_rate_region,
+)
 
 
 def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
@@ -168,7 +173,7 @@ def _get_invoice_tax_rows(invoice: "StripeInvoice", tax_config: dict) -> list[tu
 		if not tax_rate_id or tax_rate_id in seen:
 			continue
 
-		config = tax_config.get(tax_rate_id)
+		config = _get_tax_config_for_rate(tax_rate_id, tax_config)
 		if not config:
 			frappe.throw(
 				_(
@@ -186,6 +191,33 @@ def _get_invoice_tax_rows(invoice: "StripeInvoice", tax_config: dict) -> list[tu
 		seen.add(tax_rate_id)
 
 	return tax_rows
+
+
+def _get_tax_config_for_rate(tax_rate_id: str, tax_config: dict):
+	if config := tax_config.get(tax_rate_id):
+		return config
+
+	try:
+		tax_rate = stripe.TaxRate.retrieve(tax_rate_id)
+	except stripe.InvalidRequestError:
+		return None
+
+	matching_configs = [
+		config
+		for config in tax_config.values()
+		if _tax_config_matches_tax_rate(config, tax_rate)
+	]
+
+	if len(matching_configs) == 1:
+		return matching_configs[0]
+
+
+def _tax_config_matches_tax_rate(config, tax_rate) -> bool:
+	return (
+		(config.region or None) == get_tax_rate_region(tax_rate)
+		and flt(config.rate) == get_tax_rate_percentage(tax_rate)
+		and config.calculation == get_tax_rate_calculation(tax_rate)
+	)
 
 
 def _get_tax_entries(source, *fieldnames: str):

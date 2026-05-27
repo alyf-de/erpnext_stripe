@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import stripe
 
@@ -112,4 +113,37 @@ class TestCreateInvoice(unittest.TestCase):
 		config = _stripe_object(account="VAT 19", rate=19, region="DE")
 
 		self.assertEqual(_get_invoice_tax_rows(invoice, {"txr_19": config}), [("txr_19", config)])
+
+	def test_matches_unknown_tax_rate_to_existing_config(self):
+		invoice = _stripe_object(
+			total_taxes=[
+				{
+					"amount": 475,
+					"tax_rate_details": {"tax_rate": "txr_new_19"},
+				}
+			]
+		)
+		config = _stripe_object(
+			account="VAT 19",
+			calculation="Exclusive",
+			rate=19,
+			region="DE",
+		)
+		tax_rate = _stripe_object(
+			id="txr_new_19",
+			country="DE",
+			state=None,
+			jurisdiction="DE",
+			percentage=19,
+			inclusive=False,
+		)
+
+		with patch(
+			"erpnext_stripe.operations.create_invoice.stripe.TaxRate.retrieve",
+			return_value=tax_rate,
+		):
+			self.assertEqual(
+				_get_invoice_tax_rows(invoice, {"txr_old_19": config}),
+				[("txr_new_19", config)],
+			)
 

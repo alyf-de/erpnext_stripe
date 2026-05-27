@@ -3,6 +3,7 @@ import stripe
 
 from erpnext_stripe.operations.create_customer import run as create_customer
 from erpnext_stripe.operations.create_product import run as create_product
+from erpnext_stripe.tax_rates import get_tax_rate_data
 
 
 @frappe.whitelist(methods=["POST"])
@@ -91,25 +92,11 @@ def import_products(product_ids: str | None = None, products: str | None = None)
 @frappe.whitelist(methods=["POST"])
 def get_tax_rates():
 	init_stripe()
-	rates = []
 
-	for tax_rate in stripe.TaxRate.list():
-		region_parts = [
-			getattr(tax_rate, "country", None),
-			getattr(tax_rate, "state", None),
-			getattr(tax_rate, "jurisdiction", None),
-		]
-		region = " - ".join(part for part in region_parts if part)
-
-		rates.append({
-			"stripe_id": tax_rate.id,
-			"region": region or getattr(tax_rate, "display_name", None) or tax_rate.description,
-			"description": tax_rate.description,
-			"rate": tax_rate.percentage,
-			"inclusive": tax_rate.inclusive,
-		})
-
-	return rates
+	return [
+		get_tax_rate_data(tax_rate)
+		for tax_rate in stripe.TaxRate.list(limit=100).auto_paging_iter()
+	]
 
 
 def init_stripe():
