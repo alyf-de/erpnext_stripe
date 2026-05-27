@@ -43,8 +43,11 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 	_ensure_customer(invoice.customer, ignore_permissions=ignore_permissions)
 
 	settings = frappe.get_single("ERPNext Stripe Settings")
-	tax_config = _get_tax_config(settings)
-	tax_rows = _get_invoice_tax_rows(invoice, tax_config)
+	tax_rows = _get_invoice_tax_rows(
+		invoice,
+		settings,
+		ignore_permissions=ignore_permissions,
+	)
 
 	invoice_doc: SalesInvoice = frappe.new_doc("Sales Invoice")
 	invoice_doc.stripe_id = invoice.id
@@ -161,9 +164,20 @@ def _get_tax_config(settings) -> dict:
 	return {row.stripe_id: row for row in settings.tax_configurations if row.stripe_id}
 
 
-def _get_invoice_tax_rows(invoice: "StripeInvoice", tax_config: dict) -> list[tuple[str, object]]:
+def _get_invoice_tax_rows(
+	invoice: "StripeInvoice",
+	settings,
+	ignore_permissions: bool = False,
+) -> list[tuple[str, object]]:
+	"""Resolve invoice tax rates against ERPNext Stripe Settings.
+
+	Unknown Stripe tax rate IDs are imported into `settings.tax_configurations`
+	as a side effect (with the account copied from a uniquely matching existing
+	row, when available). The settings doc is saved once per imported rate.
+	"""
 	tax_rows = []
 	seen = set()
+	tax_config = _get_tax_config(settings)
 
 	for tax in _get_tax_entries(invoice, "total_tax_amounts", "total_taxes"):
 		if not tax.amount:
@@ -173,7 +187,9 @@ def _get_invoice_tax_rows(invoice: "StripeInvoice", tax_config: dict) -> list[tu
 		if not tax_rate_id or tax_rate_id in seen:
 			continue
 
-		config = _get_tax_config_for_rate(tax_rate_id, tax_config)
+		config = tax_config.get(tax_rate_id) or _import_tax_config_for_rate(
+			tax_rate_id, settings, ignore_permissions=ignore_permissions
+		)
 		if not config:
 			frappe.throw(
 				_(
@@ -193,23 +209,33 @@ def _get_invoice_tax_rows(invoice: "StripeInvoice", tax_config: dict) -> list[tu
 	return tax_rows
 
 
-def _get_tax_config_for_rate(tax_rate_id: str, tax_config: dict):
-	if config := tax_config.get(tax_rate_id):
-		return config
-
+def _import_tax_config_for_rate(tax_rate_id: str, settings, ignore_permissions: bool = False):
 	try:
 		tax_rate = stripe.TaxRate.retrieve(tax_rate_id)
 	except stripe.InvalidRequestError:
 		return None
 
-	matching_configs = [
-		config
-		for config in tax_config.values()
-		if _tax_config_matches_tax_rate(config, tax_rate)
-	]
+	matching_config = _get_matching_tax_config(settings.tax_configurations, tax_rate)
+	account = matching_config.account if matching_config else None
+	return _import_tax_config(settings, tax_rate, account=account, ignore_permissions=ignore_permissions)
 
-	if len(matching_configs) == 1:
-		return matching_configs[0]
+
+def _get_matching_tax_config(configs, tax_rate):
+	matches = [config for config in configs if _tax_config_matches_tax_rate(config, tax_rate)]
+	if len(matches) == 1:
+		return matches[0]
+
+
+def _import_tax_config(settings, tax_rate, account: str | None = None, ignore_permissions: bool = False):
+	config = settings.append("tax_configurations", {
+		"stripe_id": tax_rate.id,
+		"region": get_tax_rate_region(tax_rate),
+		"rate": get_tax_rate_percentage(tax_rate),
+		"calculation": get_tax_rate_calculation(tax_rate),
+		"account": account,
+	})
+	settings.save(ignore_permissions=ignore_permissions)
+	return config
 
 
 def _tax_config_matches_tax_rate(config, tax_rate) -> bool:

@@ -38,6 +38,23 @@ def _stripe_object(**values):
 	return SimpleNamespace(**values)
 
 
+class _Settings:
+	def __init__(self, tax_configurations=None):
+		self.tax_configurations = tax_configurations or []
+		self.saved = False
+		self.ignore_permissions = False
+
+	def append(self, fieldname, value):
+		assert fieldname == "tax_configurations", fieldname
+		row = _stripe_object(**value)
+		self.tax_configurations.append(row)
+		return row
+
+	def save(self, ignore_permissions=False):
+		self.saved = True
+		self.ignore_permissions = ignore_permissions
+
+
 class TestCreateInvoice(unittest.TestCase):
 	def test_reads_current_pricing_shape(self):
 		line = _line_item(
@@ -110,11 +127,12 @@ class TestCreateInvoice(unittest.TestCase):
 				}
 			]
 		)
-		config = _stripe_object(account="VAT 19", rate=19, region="DE")
+		config = _stripe_object(account="VAT 19", rate=19, region="DE", stripe_id="txr_19")
+		settings = _Settings([config])
 
-		self.assertEqual(_get_invoice_tax_rows(invoice, {"txr_19": config}), [("txr_19", config)])
+		self.assertEqual(_get_invoice_tax_rows(invoice, settings), [("txr_19", config)])
 
-	def test_matches_unknown_tax_rate_to_existing_config(self):
+	def test_imports_unknown_tax_rate_with_matching_account(self):
 		invoice = _stripe_object(
 			total_taxes=[
 				{
@@ -123,7 +141,8 @@ class TestCreateInvoice(unittest.TestCase):
 				}
 			]
 		)
-		config = _stripe_object(
+		old_config = _stripe_object(
+			stripe_id="txr_old_19",
 			account="VAT 19",
 			calculation="Exclusive",
 			rate=19,
@@ -137,13 +156,62 @@ class TestCreateInvoice(unittest.TestCase):
 			percentage=19,
 			inclusive=False,
 		)
+		settings = _Settings([old_config])
 
 		with patch(
 			"erpnext_stripe.operations.create_invoice.stripe.TaxRate.retrieve",
 			return_value=tax_rate,
 		):
-			self.assertEqual(
-				_get_invoice_tax_rows(invoice, {"txr_old_19": config}),
-				[("txr_new_19", config)],
+			tax_rows = _get_invoice_tax_rows(
+				invoice,
+				settings=settings,
+				ignore_permissions=True,
 			)
+
+		self.assertTrue(settings.saved)
+		self.assertTrue(settings.ignore_permissions)
+		imported_config = settings.tax_configurations[-1]
+		self.assertEqual(imported_config.stripe_id, "txr_new_19")
+		self.assertEqual(imported_config.account, "VAT 19")
+		self.assertEqual(tax_rows, [("txr_new_19", imported_config)])
+
+	def test_imports_unknown_tax_rate_before_throwing_for_missing_account(self):
+		invoice = _stripe_object(
+			total_taxes=[
+				{
+					"amount": 475,
+					"tax_rate_details": {"tax_rate": "txr_new_19"},
+				}
+			]
+		)
+		tax_rate = _stripe_object(
+			id="txr_new_19",
+			country="DE",
+			state=None,
+			jurisdiction="DE",
+			percentage=19,
+			inclusive=False,
+		)
+		settings = _Settings()
+
+		with (
+			patch(
+				"erpnext_stripe.operations.create_invoice.stripe.TaxRate.retrieve",
+				return_value=tax_rate,
+			),
+			patch(
+				"erpnext_stripe.operations.create_invoice.frappe.throw",
+				side_effect=RuntimeError("missing account"),
+			),
+		):
+			with self.assertRaises(RuntimeError):
+				_get_invoice_tax_rows(
+					invoice,
+					settings=settings,
+					ignore_permissions=True,
+				)
+
+		self.assertTrue(settings.saved)
+		self.assertEqual(settings.tax_configurations[0].stripe_id, "txr_new_19")
+		self.assertIsNone(settings.tax_configurations[0].account)
 
