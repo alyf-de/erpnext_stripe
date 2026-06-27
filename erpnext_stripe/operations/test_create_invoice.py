@@ -5,6 +5,7 @@ from unittest.mock import patch
 import stripe
 
 from erpnext_stripe.operations.create_invoice import (
+	MissingTaxAccountError,
 	_get_invoice_tax_rows,
 	_get_product_id,
 	_get_quantity,
@@ -194,23 +195,18 @@ class TestCreateInvoice(unittest.TestCase):
 		)
 		settings = _Settings()
 
-		with (
-			patch(
-				"erpnext_stripe.operations.create_invoice.stripe.TaxRate.retrieve",
-				return_value=tax_rate,
-			),
-			patch(
-				"erpnext_stripe.operations.create_invoice.frappe.throw",
-				side_effect=RuntimeError("missing account"),
-			),
+		with patch(
+			"erpnext_stripe.operations.create_invoice.stripe.TaxRate.retrieve",
+			return_value=tax_rate,
 		):
-			with self.assertRaises(RuntimeError):
+			with self.assertRaises(MissingTaxAccountError) as cm:
 				_get_invoice_tax_rows(
 					invoice,
 					settings=settings,
 					ignore_permissions=True,
 				)
 
+		self.assertEqual(cm.exception.tax_rate_id, "txr_new_19")
 		self.assertTrue(settings.saved)
 		self.assertEqual(settings.tax_configurations[0].stripe_id, "txr_new_19")
 		self.assertIsNone(settings.tax_configurations[0].account)

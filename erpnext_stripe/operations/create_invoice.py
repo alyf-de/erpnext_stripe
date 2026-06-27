@@ -21,7 +21,13 @@ from erpnext_stripe.tax_rates import (
 )
 
 
-def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
+class MissingTaxAccountError(frappe.ValidationError):
+	def __init__(self, tax_rate_id: str):
+		super().__init__(tax_rate_id)
+		self.tax_rate_id = tax_rate_id
+
+
+def run(invoice: "StripeInvoice", ignore_permissions: bool = False) -> "SalesInvoice | None":
 	if frappe.db.exists("Sales Invoice", {"stripe_id": invoice.id}):
 		return
 
@@ -102,6 +108,7 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False):
 		frappe.log_error(title="Stripe Invoice: Submit Error")
 
 	_attach_invoice_pdf(invoice, invoice_doc)
+	return invoice_doc
 
 
 def _get_product_id(line) -> str:
@@ -199,9 +206,7 @@ def _get_invoice_tax_rows(
 			)
 
 		if not config.account:
-			frappe.throw(
-				_("No ERPNext tax account configured for Stripe tax rate {0}.").format(tax_rate_id)
-			)
+			raise MissingTaxAccountError(tax_rate_id)
 
 		tax_rows.append((tax_rate_id, config))
 		seen.add(tax_rate_id)

@@ -4,27 +4,10 @@
 frappe.ui.form.on("ERPNext Stripe Settings", {
 	refresh(frm) {
 		if (frm.doc.api_key) {
-			frm.add_custom_button(
-				__("Customers"),
-				() => {
-					frm.trigger("import_customers");
-				},
-				__("Import")
-			);
-			frm.add_custom_button(
-				__("Products"),
-				() => {
-					frm.trigger("import_products");
-				},
-				__("Import")
-			);
-			frm.add_custom_button(
-				__("Tax Rates"),
-				() => {
-					frm.trigger("import_tax_rates");
-				},
-				__("Import")
-			);
+			add_import_button(frm, __("Customers"), "import_customers");
+			add_import_button(frm, __("Products"), "import_products");
+			add_import_button(frm, __("Tax Rates"), "import_tax_rates");
+			add_import_button(frm, __("Invoices"), "import_invoices");
 		}
 	},
 
@@ -208,7 +191,27 @@ frappe.ui.form.on("ERPNext Stripe Settings", {
 			],
 		});
 	},
+
+	import_invoices() {
+		open_date_range_import_dialog({
+			title: __("Stripe Invoices"),
+			importing_message: __("Importing invoices..."),
+			error_message: __("Error importing invoices"),
+			success_message: get_invoice_import_message,
+			import_method: "erpnext_stripe.api.import_invoices",
+		});
+	},
 });
+
+function add_import_button(frm, label, trigger) {
+	frm.add_custom_button(
+		label,
+		() => {
+			frm.trigger(trigger);
+		},
+		__("Import")
+	);
+}
 
 function open_import_dialog(options) {
 	frappe.dom.freeze(options.loading_message);
@@ -248,27 +251,9 @@ function open_import_dialog(options) {
 						return;
 					}
 
-					frappe.dom.freeze(options.importing_message);
-					frappe
-						.xcall(options.import_method, {
-							[options.rows_arg_name]: selected_rows,
-						})
-						.then(() => {
-							frappe.show_alert({
-								message: options.success_message,
-								indicator: "green",
-							});
-							dialog.hide();
-						})
-						.catch(() => {
-							frappe.show_alert({
-								message: options.error_message,
-								indicator: "red",
-							});
-						})
-						.finally(() => {
-							frappe.dom.unfreeze();
-						});
+					run_import(dialog, options, {
+						[options.rows_arg_name]: selected_rows,
+					});
 				},
 			});
 
@@ -277,6 +262,79 @@ function open_import_dialog(options) {
 		.finally(() => {
 			frappe.dom.unfreeze();
 		});
+}
+
+function open_date_range_import_dialog(options) {
+	const dialog = new frappe.ui.Dialog({
+		title: options.title,
+		fields: [
+			{
+				fieldname: "from_date",
+				label: __("From Date"),
+				fieldtype: "Date",
+				reqd: 1,
+			},
+			{
+				fieldname: "to_date",
+				label: __("To Date"),
+				fieldtype: "Date",
+				reqd: 1,
+			},
+		],
+		primary_action_label: __("Import"),
+		primary_action: () => {
+			const values = dialog.get_values();
+			if (!values) {
+				return;
+			}
+
+			run_import(dialog, options, {
+				from_date: values.from_date,
+				to_date: values.to_date,
+			});
+		},
+	});
+
+	dialog.show();
+}
+
+function run_import(dialog, options, args) {
+	frappe.dom.freeze(options.importing_message);
+	frappe
+		.xcall(options.import_method, args)
+		.then((result) => {
+			frappe.show_alert({
+				message:
+					typeof options.success_message === "function"
+						? options.success_message(result)
+						: options.success_message,
+				indicator: "green",
+			});
+			dialog.hide();
+		})
+		.catch(() => {
+			frappe.show_alert({
+				message: options.error_message,
+				indicator: "red",
+			});
+		})
+		.finally(() => {
+			frappe.dom.unfreeze();
+		});
+}
+
+function get_invoice_import_message(result) {
+	const imported = result?.imported || 0;
+	const skipped = result?.skipped || 0;
+
+	if (skipped) {
+		return __("{0} invoice(s) imported. {1} skipped; check tax configuration.", [
+			imported,
+			skipped,
+		]);
+	}
+
+	return __("{0} invoice(s) imported.", [imported]);
 }
 
 function mark_row_as_selected(field) {

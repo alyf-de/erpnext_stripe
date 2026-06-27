@@ -1,7 +1,18 @@
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
+
 import frappe
 import stripe
+from frappe import _
+from frappe.utils import get_system_timezone, getdate
 
 from erpnext_stripe.operations.create_customer import run as create_customer
+from erpnext_stripe.operations.create_invoice import (
+	MissingTaxAccountError,
+)
+from erpnext_stripe.operations.create_invoice import (
+	run as create_invoice,
+)
 from erpnext_stripe.operations.create_product import run as create_product
 from erpnext_stripe.tax_rates import get_tax_rate_data
 
@@ -90,6 +101,41 @@ def import_products(product_ids: str | None = None, products: str | None = None)
 
 
 @frappe.whitelist(methods=["POST"])
+def import_invoices(from_date: str, to_date: str):
+	frappe.has_permission("Sales Invoice", ptype="create", throw=True)
+
+	init_stripe()
+	from_timestamp, to_timestamp = _get_invoice_created_range(from_date, to_date)
+	imported = 0
+	skipped = []
+
+	for invoice in stripe.Invoice.list(
+		limit=100,
+		created={"gte": from_timestamp, "lt": to_timestamp},
+	).auto_paging_iter():
+		if getattr(invoice, "status", None) == "draft":
+			continue
+
+		if frappe.db.exists("Sales Invoice", {"stripe_id": invoice.id}):
+			continue
+
+		try:
+			invoice_doc = create_invoice(invoice)
+		except MissingTaxAccountError as e:
+			skipped.append({
+				"stripe_id": invoice.id,
+				"reason": "missing_tax_account",
+				"tax_rate_id": e.tax_rate_id,
+			})
+			continue
+
+		if invoice_doc:
+			imported += 1
+
+	return {"imported": imported, "skipped": len(skipped), "skipped_invoices": skipped}
+
+
+@frappe.whitelist(methods=["POST"])
 def get_tax_rates():
 	init_stripe()
 
@@ -166,6 +212,19 @@ def _parse_import_rows(
 		parsed_rows.append(frappe._dict({"stripe_id": stripe_id, existing_fieldname: existing_value}))
 
 	return parsed_rows
+
+
+def _get_invoice_created_range(from_date: str, to_date: str) -> tuple[int, int]:
+	from_date = getdate(from_date)
+	to_date = getdate(to_date)
+
+	if from_date > to_date:
+		frappe.throw(_("From Date cannot be after To Date."))
+
+	system_timezone = ZoneInfo(get_system_timezone())
+	from_datetime = datetime.combine(from_date, time.min, tzinfo=system_timezone)
+	to_datetime = datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=system_timezone)
+	return int(from_datetime.timestamp()), int(to_datetime.timestamp())
 
 
 def _attach_stripe_id(doctype: str, docname: str, stripe_id: str):
