@@ -8,6 +8,7 @@ frappe.ui.form.on("ERPNext Stripe Settings", {
 			add_import_button(frm, __("Products"), "import_products");
 			add_import_button(frm, __("Tax Rates"), "import_tax_rates");
 			add_import_button(frm, __("Invoices"), "import_invoices");
+			add_import_button(frm, __("Balance Transactions"), "import_balance_transactions");
 		}
 	},
 
@@ -203,6 +204,16 @@ frappe.ui.form.on("ERPNext Stripe Settings", {
 			import_method: "erpnext_stripe.api.import_invoices",
 		});
 	},
+
+	import_balance_transactions() {
+		open_date_range_import_dialog({
+			title: __("Stripe Balance Transactions"),
+			importing_message: __("Importing balance transactions..."),
+			error_message: __("Error importing balance transactions"),
+			success_message: get_balance_transaction_import_message,
+			import_method: "erpnext_stripe.api.import_balance_transactions",
+		});
+	},
 });
 
 function add_import_button(frm, label, trigger) {
@@ -337,6 +348,12 @@ function get_invoice_import_message(result) {
 	}
 
 	return __("{0} invoice(s) imported.", [imported]);
+}
+
+function get_balance_transaction_import_message(result) {
+	const imported = result?.imported || 0;
+
+	return __("{0} balance transaction(s) imported as Bank Transaction(s).", [imported]);
 }
 
 function mark_row_as_selected(field) {

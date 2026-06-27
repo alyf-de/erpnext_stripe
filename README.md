@@ -23,13 +23,19 @@ This app only reads from Stripe. When using a restricted API key, enable **Read*
 - Products
 - Prices
 - Tax Rates
+- Invoices
+- Payment Intents
+- Balance
+- Balance Transaction Sources
+- Charges and Refunds
+- Payouts
 
 Subscribe to the following webhook events in the Stripe Dashboard:
 
+- `charge.succeeded`
 - `customer.created`
 - `customer.updated`
 - `invoice.finalized`
-- `invoice.paid`
 
 ### Setup
 
@@ -41,17 +47,19 @@ Subscribe to the following webhook events in the Stripe Dashboard:
 
 ### Payment Reconciliation
 
-Stripe acts as an intermediary bank account. Set up a **Bank Account** in ERPNext (e.g. "Stripe") with a dedicated GL account and configure it as the **Stripe Bank Account** in ERPNext Stripe Settings.
+Stripe acts as an intermediary clearing account. Set up a **Bank Account** in ERPNext (e.g. "Stripe") with a dedicated GL account and configure it as the **Stripe Bank Account** in ERPNext Stripe Settings. This should represent your Stripe balance, not the real bank account that receives Stripe payouts.
 
 **Automated by this app:**
 
-When a customer pays a Stripe invoice (`invoice.paid`), the app creates a Payment Entry:
-- Debit: Stripe Bank Account
-- Credit: Accounts Receivable
+When a customer payment succeeds (`charge.succeeded`), the app imports the linked Stripe balance transaction as a **Bank Transaction** against the configured Stripe Bank Account. Existing Stripe balance transactions can also be imported from **ERPNext Stripe Settings** via **Import > Balance Transactions** for a selected date range.
+
+Use ERPNext's bank reconciliation flow to reconcile those Bank Transactions against Sales Invoices and other accounting documents. This creates the accounting entry that clears Accounts Receivable and leaves unreconciled Stripe balance movements visible for manual recovery if automatic matching or posting fails.
+
+Imported charge balance transactions use Stripe's gross transaction amount and do not book the nested Stripe processing fee. Stripe fee balance transactions are imported separately as Bank Transactions and can later be reconciled against Stripe's fee invoices.
 
 **Handled manually:**
 
-When Stripe pays out to your real bank account, create a Journal Entry:
+When Stripe pays out to your real bank account, reconcile the imported payout Bank Transaction against the corresponding real-bank transaction or create a Journal Entry:
 
 | Account | Debit | Credit |
 |---|---|---|

@@ -6,6 +6,7 @@ import stripe
 from frappe import _
 from frappe.utils import get_system_timezone, getdate
 
+from erpnext_stripe.operations.create_bank_transaction import run as create_bank_transaction
 from erpnext_stripe.operations.create_customer import run as create_customer
 from erpnext_stripe.operations.create_invoice import (
 	MissingTaxAccountError,
@@ -105,7 +106,7 @@ def import_invoices(from_date: str, to_date: str):
 	frappe.has_permission("Sales Invoice", ptype="create", throw=True)
 
 	init_stripe()
-	from_timestamp, to_timestamp = _get_invoice_created_range(from_date, to_date)
+	from_timestamp, to_timestamp = _get_created_range(from_date, to_date)
 	imported = 0
 	skipped = []
 
@@ -135,6 +136,30 @@ def import_invoices(from_date: str, to_date: str):
 			imported += 1
 
 	return {"imported": imported, "skipped": len(skipped), "skipped_invoices": skipped}
+
+
+@frappe.whitelist(methods=["POST"])
+def import_balance_transactions(from_date: str, to_date: str):
+	frappe.has_permission("Bank Transaction", ptype="create", throw=True)
+
+	init_stripe()
+	from_timestamp, to_timestamp = _get_created_range(from_date, to_date)
+	imported = 0
+
+	for balance_transaction in stripe.BalanceTransaction.list(
+		limit=100,
+		created={"gte": from_timestamp, "lt": to_timestamp},
+		expand=["data.source"],
+	).auto_paging_iter():
+		if create_bank_transaction(balance_transaction):
+			imported += 1
+
+	return {"imported": imported}
+
+
+@frappe.whitelist(methods=["POST"])
+def import_payments(from_date: str, to_date: str):
+	return import_balance_transactions(from_date, to_date)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -211,7 +236,7 @@ def _parse_import_rows(
 	return parsed_rows
 
 
-def _get_invoice_created_range(from_date: str, to_date: str) -> tuple[int, int]:
+def _get_created_range(from_date: str, to_date: str) -> tuple[int, int]:
 	from_date = getdate(from_date)
 	to_date = getdate(to_date)
 

@@ -4,10 +4,10 @@ import frappe
 import stripe
 
 EVENT_HANDLERS = {
+	"charge.succeeded": "charge_succeeded",
 	"customer.created": "customer_created",
 	"customer.updated": "customer_updated",
 	"invoice.finalized": "invoice_finalized",
-	"invoice.paid": "invoice_paid",
 }
 
 
