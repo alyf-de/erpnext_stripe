@@ -72,9 +72,7 @@ def _update_customer(stripe_customer, ignore_permissions: bool = False):
 	customer_name = frappe.db.get_value("Customer", {"stripe_id": stripe_customer.id})
 	customer_doc = frappe.get_doc("Customer", customer_name)
 
-	if resolved_customer_name := get_stripe_customer_name(
-		stripe_customer, fallback_to_identifier=False
-	):
+	if resolved_customer_name := get_stripe_customer_name(stripe_customer, fallback_to_identifier=False):
 		customer_doc.customer_name = resolved_customer_name
 
 	if hasattr(stripe_customer, "business_name") and stripe_customer.business_name:

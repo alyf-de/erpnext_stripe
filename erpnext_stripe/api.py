@@ -122,11 +122,13 @@ def import_invoices(from_date: str, to_date: str):
 		try:
 			invoice_doc = create_invoice(invoice)
 		except MissingTaxAccountError as e:
-			skipped.append({
-				"stripe_id": invoice.id,
-				"reason": "missing_tax_account",
-				"tax_rate_id": e.tax_rate_id,
-			})
+			skipped.append(
+				{
+					"stripe_id": invoice.id,
+					"reason": "missing_tax_account",
+					"tax_rate_id": e.tax_rate_id,
+				}
+			)
 			continue
 
 		if invoice_doc:
@@ -139,10 +141,7 @@ def import_invoices(from_date: str, to_date: str):
 def get_tax_rates():
 	init_stripe()
 
-	return [
-		get_tax_rate_data(tax_rate)
-		for tax_rate in stripe.TaxRate.list(limit=100).auto_paging_iter()
-	]
+	return [get_tax_rate_data(tax_rate) for tax_rate in stripe.TaxRate.list(limit=100).auto_paging_iter()]
 
 
 def init_stripe():
@@ -196,9 +195,7 @@ def _parse_import_rows(
 
 		existing_value = row.get(existing_fieldname) or None
 		if existing_value is not None and not isinstance(existing_value, str):
-			raise TypeError(
-				f"{label.title()} existing record must be a string, got {type(existing_value)}"
-			)
+			raise TypeError(f"{label.title()} existing record must be a string, got {type(existing_value)}")
 
 		if existing_value:
 			if existing_value in selected_existing_records:

@@ -31,10 +31,7 @@ def _stripe_object(**values):
 		if isinstance(value, dict):
 			values[key] = _stripe_object(**value)
 		elif isinstance(value, list):
-			values[key] = [
-				_stripe_object(**entry) if isinstance(entry, dict) else entry
-				for entry in value
-			]
+			values[key] = [_stripe_object(**entry) if isinstance(entry, dict) else entry for entry in value]
 
 	return SimpleNamespace(**values)
 
@@ -210,4 +207,3 @@ class TestCreateInvoice(unittest.TestCase):
 		self.assertTrue(settings.saved)
 		self.assertEqual(settings.tax_configurations[0].stripe_id, "txr_new_19")
 		self.assertIsNone(settings.tax_configurations[0].account)
-

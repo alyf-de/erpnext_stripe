@@ -83,20 +83,26 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False) -> "SalesInv
 		quantity = _get_quantity(line)
 		rate = _get_rate(line, quantity)
 
-		invoice_doc.append("items", {
-			"item_code": item_code,
-			"qty": quantity,
-			"rate": rate,
-		})
+		invoice_doc.append(
+			"items",
+			{
+				"item_code": item_code,
+				"qty": quantity,
+				"rate": rate,
+			},
+		)
 
 	for tax_rate_id, config in tax_rows:
-		invoice_doc.append("taxes", {
-			"charge_type": "On Net Total",
-			"account_head": config.account,
-			"rate": flt(config.rate),
-			"description": config.region or tax_rate_id,
-			"cost_center": "",
-		})
+		invoice_doc.append(
+			"taxes",
+			{
+				"charge_type": "On Net Total",
+				"account_head": config.account,
+				"rate": flt(config.rate),
+				"description": config.region or tax_rate_id,
+				"cost_center": "",
+			},
+		)
 
 	invoice_doc.flags.ignore_permissions = ignore_permissions
 	invoice_doc.set_missing_values()
@@ -232,13 +238,16 @@ def _get_matching_tax_config(configs, tax_rate):
 
 
 def _import_tax_config(settings, tax_rate, account: str | None = None, ignore_permissions: bool = False):
-	config = settings.append("tax_configurations", {
-		"stripe_id": tax_rate.id,
-		"region": get_tax_rate_region(tax_rate),
-		"rate": get_tax_rate_percentage(tax_rate),
-		"calculation": get_tax_rate_calculation(tax_rate),
-		"account": account,
-	})
+	config = settings.append(
+		"tax_configurations",
+		{
+			"stripe_id": tax_rate.id,
+			"region": get_tax_rate_region(tax_rate),
+			"rate": get_tax_rate_percentage(tax_rate),
+			"calculation": get_tax_rate_calculation(tax_rate),
+			"account": account,
+		},
+	)
 	settings.save(ignore_permissions=ignore_permissions)
 	return config
 

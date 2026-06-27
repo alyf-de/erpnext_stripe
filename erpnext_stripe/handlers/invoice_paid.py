@@ -38,9 +38,7 @@ def handle(event: "Event", ignore_permissions: bool = False):
 	payment_entry.reference_date = today()
 
 	if settings.stripe_bank_account:
-		payment_entry.paid_to = frappe.db.get_value(
-			"Bank Account", settings.stripe_bank_account, "account"
-		)
+		payment_entry.paid_to = frappe.db.get_value("Bank Account", settings.stripe_bank_account, "account")
 
 	payment_entry.append(
 		"references",

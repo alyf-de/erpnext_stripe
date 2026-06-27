@@ -109,7 +109,9 @@ frappe.ui.form.on("ERPNext Stripe Settings", {
 				frm.refresh_field("tax_configurations");
 				frm.dirty();
 				frappe.show_alert({
-					message: __("{0} tax rate(s) added. Set the Account for each and save.", [added]),
+					message: __("{0} tax rate(s) added. Set the Account for each and save.", [
+						added,
+					]),
 					indicator: "green",
 				});
 			})

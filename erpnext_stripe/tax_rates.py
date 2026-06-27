@@ -12,11 +12,7 @@ def get_tax_rate_region(tax_rate) -> str | None:
 			region_parts.append(part)
 
 	region = " - ".join(region_parts)
-	return (
-		region
-		or getattr(tax_rate, "display_name", None)
-		or getattr(tax_rate, "description", None)
-	)
+	return region or getattr(tax_rate, "display_name", None) or getattr(tax_rate, "description", None)
 
 
 def get_tax_rate_percentage(tax_rate) -> float:
