@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 if TYPE_CHECKING:
 	from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
@@ -9,7 +11,8 @@ import frappe
 import requests
 import stripe
 from frappe import _
-from frappe.utils.data import flt, today
+from frappe.utils import get_system_timezone
+from frappe.utils.data import flt, getdate, today
 
 from erpnext_stripe.operations.create_customer import run as create_customer
 from erpnext_stripe.operations.create_lead import run as create_lead
@@ -61,9 +64,13 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False) -> "SalesInv
 		invoice_doc.name = invoice.number
 		invoice_doc.flags.name_set = True
 	invoice_doc.due_date = invoice.due_date or today()
+	# Stripe has already determined the due date; customer defaults must not shorten it.
+	invoice_doc.payment_terms_template = ""
+	invoice_doc.ignore_default_payment_terms_template = 1
 	invoice_doc.customer = frappe.db.get_value("Customer", {"stripe_id": invoice.customer})
 	invoice_doc.project = settings.project
 	invoice_doc.selling_price_list = settings.price_list
+	_set_posting_datetime(invoice_doc, invoice)
 
 	for line in invoice.lines.data:
 		product_id = _get_product_id(line)
@@ -106,6 +113,8 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False) -> "SalesInv
 
 	invoice_doc.flags.ignore_permissions = ignore_permissions
 	invoice_doc.set_missing_values()
+	invoice_doc.payment_terms_template = ""
+	invoice_doc.payment_schedule = []
 	invoice_doc.save(ignore_permissions=ignore_permissions)
 
 	try:
@@ -158,6 +167,39 @@ def _get_rate(line, quantity: float) -> float:
 			return flt(amount / 100 / quantity)
 
 	frappe.throw(_("Stripe invoice line {0} has no unit amount in its pricing data.").format(line.id))
+
+
+def _set_posting_datetime(invoice_doc: "SalesInvoice", invoice: "StripeInvoice"):
+	posting_datetime = _get_invoice_posting_datetime(invoice)
+	if not posting_datetime:
+		return
+
+	invoice_doc.set_posting_time = 1
+	invoice_doc.posting_date = getdate(posting_datetime)
+	if invoice_doc.meta.has_field("posting_time"):
+		invoice_doc.posting_time = posting_datetime.time().replace(microsecond=0)
+
+
+def _get_invoice_posting_datetime(invoice: "StripeInvoice") -> datetime | None:
+	timestamp = _get_invoice_accounting_timestamp(invoice)
+	if timestamp is None:
+		return None
+
+	system_timezone = ZoneInfo(get_system_timezone())
+	return datetime.fromtimestamp(timestamp, tz=system_timezone)
+
+
+def _get_invoice_accounting_timestamp(invoice: "StripeInvoice") -> int | None:
+	effective_at = getattr(invoice, "effective_at", None)
+	if effective_at is not None:
+		return effective_at
+
+	status_transitions = getattr(invoice, "status_transitions", None)
+	finalized_at = getattr(status_transitions, "finalized_at", None)
+	if finalized_at is not None:
+		return finalized_at
+
+	return getattr(invoice, "created", None)
 
 
 def _ensure_customer(stripe_customer_id: str, ignore_permissions: bool = False):
