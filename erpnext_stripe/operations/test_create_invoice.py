@@ -108,6 +108,47 @@ class TestCreateInvoice(unittest.TestCase):
 		self.assertAlmostEqual(quantity, 0.5)
 		self.assertAlmostEqual(_get_rate(line, quantity), 29.84)
 
+	def test_derives_negative_proration_rate_from_subtotal(self):
+		line = _line_item(
+			amount=-1702,
+			subtotal=-1702,
+			pricing={
+				"price_details": {
+					"price": "price_current",
+					"product": "prod_current",
+				},
+				"type": "price_details",
+				"unit_amount_decimal": None,
+			},
+			parent={"subscription_item_details": {"proration": True}},
+			quantity=1,
+		)
+
+		quantity = _get_quantity(line)
+
+		self.assertAlmostEqual(quantity, 1)
+		self.assertAlmostEqual(_get_rate(line, quantity), -17.02)
+
+	def test_derives_positive_proration_rate_from_amount(self):
+		line = _line_item(
+			amount=3405,
+			pricing={
+				"price_details": {
+					"price": "price_current",
+					"product": "prod_current",
+				},
+				"type": "price_details",
+				"unit_amount_decimal": None,
+			},
+			parent={"subscription_item_details": {"proration": True}},
+			quantity=2,
+		)
+
+		quantity = _get_quantity(line)
+
+		self.assertAlmostEqual(quantity, 2)
+		self.assertAlmostEqual(_get_rate(line, quantity), 17.025)
+
 	def test_reads_current_total_tax_shape(self):
 		tax = _stripe_object(
 			amount=475,

@@ -152,6 +152,11 @@ def _get_rate(line, quantity: float) -> float:
 	if unit_amount is not None:
 		return flt(unit_amount / 100)
 
+	for amount_field in ("subtotal", "amount"):
+		amount = getattr(line, amount_field, None)
+		if amount is not None:
+			return flt(amount / 100 / quantity)
+
 	frappe.throw(_("Stripe invoice line {0} has no unit amount in its pricing data.").format(line.id))
 
 
