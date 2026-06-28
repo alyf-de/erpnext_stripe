@@ -274,6 +274,7 @@ function open_import_dialog(options) {
 		})
 		.finally(() => {
 			frappe.dom.unfreeze();
+			frappe.hide_progress();
 		});
 }
 

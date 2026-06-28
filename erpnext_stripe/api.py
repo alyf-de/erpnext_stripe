@@ -17,6 +17,8 @@ from erpnext_stripe.operations.create_invoice import (
 from erpnext_stripe.operations.create_product import run as create_product
 from erpnext_stripe.tax_rates import get_tax_rate_data
 
+SETTINGS_DOCTYPE = "ERPNext Stripe Settings"
+
 
 @frappe.whitelist(methods=["POST"])
 def list_customers():
@@ -51,12 +53,16 @@ def import_customers(customer_ids: str | None = None, customers: str | None = No
 		existing_fieldname="existing_customer",
 	)
 
-	for customer in customers:
-		if existing_customer := customer.get("existing_customer"):
-			_attach_stripe_id("Customer", existing_customer, customer["stripe_id"])
-			continue
+	total = len(customers)
+	for count, customer in enumerate(customers, start=1):
+		try:
+			if existing_customer := customer.get("existing_customer"):
+				_attach_stripe_id("Customer", existing_customer, customer["stripe_id"])
+				continue
 
-		create_customer(stripe.Customer.retrieve(customer["stripe_id"]))
+			create_customer(stripe.Customer.retrieve(customer["stripe_id"]))
+		finally:
+			_publish_import_progress(count, total, _("Importing Stripe Customers"))
 
 
 @frappe.whitelist(methods=["POST"])
@@ -93,12 +99,16 @@ def import_products(product_ids: str | None = None, products: str | None = None)
 		existing_fieldname="existing_item",
 	)
 
-	for product in products:
-		if existing_item := product.get("existing_item"):
-			_attach_stripe_id("Item", existing_item, product["stripe_id"])
-			continue
+	total = len(products)
+	for count, product in enumerate(products, start=1):
+		try:
+			if existing_item := product.get("existing_item"):
+				_attach_stripe_id("Item", existing_item, product["stripe_id"])
+				continue
 
-		create_product(stripe.Product.retrieve(product["stripe_id"]))
+			create_product(stripe.Product.retrieve(product["stripe_id"]))
+		finally:
+			_publish_import_progress(count, total, _("Importing Stripe Products"))
 
 
 @frappe.whitelist(methods=["POST"])
@@ -109,31 +119,38 @@ def import_invoices(from_date: str, to_date: str):
 	from_timestamp, to_timestamp = _get_created_range(from_date, to_date)
 	imported = 0
 	skipped = []
+	invoices = list(
+		stripe.Invoice.list(
+			limit=100,
+			created={"gte": from_timestamp, "lt": to_timestamp},
+		).auto_paging_iter()
+	)
+	total = len(invoices)
 
-	for invoice in stripe.Invoice.list(
-		limit=100,
-		created={"gte": from_timestamp, "lt": to_timestamp},
-	).auto_paging_iter():
-		if getattr(invoice, "status", None) == "draft":
-			continue
-
-		if frappe.db.exists("Sales Invoice", {"stripe_id": invoice.id}):
-			continue
-
+	for count, invoice in enumerate(invoices, start=1):
 		try:
-			invoice_doc = create_invoice(invoice)
-		except MissingTaxAccountError as e:
-			skipped.append(
-				{
-					"stripe_id": invoice.id,
-					"reason": "missing_tax_account",
-					"tax_rate_id": e.tax_rate_id,
-				}
-			)
-			continue
+			if getattr(invoice, "status", None) == "draft":
+				continue
 
-		if invoice_doc:
-			imported += 1
+			if frappe.db.exists("Sales Invoice", {"stripe_id": invoice.id}):
+				continue
+
+			try:
+				invoice_doc = create_invoice(invoice)
+			except MissingTaxAccountError as e:
+				skipped.append(
+					{
+						"stripe_id": invoice.id,
+						"reason": "missing_tax_account",
+						"tax_rate_id": e.tax_rate_id,
+					}
+				)
+				continue
+
+			if invoice_doc:
+				imported += 1
+		finally:
+			_publish_import_progress(count, total, _("Importing Stripe Invoices"))
 
 	return {"imported": imported, "skipped": len(skipped), "skipped_invoices": skipped}
 
@@ -145,14 +162,21 @@ def import_balance_transactions(from_date: str, to_date: str):
 	init_stripe()
 	from_timestamp, to_timestamp = _get_created_range(from_date, to_date)
 	imported = 0
+	balance_transactions = list(
+		stripe.BalanceTransaction.list(
+			limit=100,
+			created={"gte": from_timestamp, "lt": to_timestamp},
+			expand=["data.source"],
+		).auto_paging_iter()
+	)
+	total = len(balance_transactions)
 
-	for balance_transaction in stripe.BalanceTransaction.list(
-		limit=100,
-		created={"gte": from_timestamp, "lt": to_timestamp},
-		expand=["data.source"],
-	).auto_paging_iter():
-		if create_bank_transaction(balance_transaction):
-			imported += 1
+	for count, balance_transaction in enumerate(balance_transactions, start=1):
+		try:
+			if create_bank_transaction(balance_transaction):
+				imported += 1
+		finally:
+			_publish_import_progress(count, total, _("Importing Stripe Balance Transactions"))
 
 	return {"imported": imported}
 
@@ -174,6 +198,19 @@ def init_stripe():
 
 	settings = frappe.get_single("ERPNext Stripe Settings")
 	stripe.api_key = settings.get_password("api_key")
+
+
+def _publish_import_progress(current: int, total: int, title: str):
+	if total <= 0:
+		return
+
+	frappe.publish_progress(
+		current / total * 100,
+		title=title,
+		description=_("Processed {0} of {1}").format(current, total),
+		doctype=SETTINGS_DOCTYPE,
+		docname=SETTINGS_DOCTYPE,
+	)
 
 
 def _get_existing_stripe_ids(doctype: str, stripe_ids: list[str]) -> set[str]:
