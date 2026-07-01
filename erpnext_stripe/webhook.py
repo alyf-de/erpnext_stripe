@@ -3,6 +3,8 @@ import json
 import frappe
 import stripe
 
+from erpnext_stripe.utils import configure_stripe
+
 EVENT_HANDLERS = {
 	"charge.succeeded": "charge_succeeded",
 	"customer.created": "customer_created",
@@ -26,7 +28,7 @@ def handler():
 	api_key = settings.get_password("api_key")
 	webhook_secret = settings.get_password("webhook_secret")
 
-	stripe.api_key = api_key
+	configure_stripe(api_key)
 	if webhook_secret:
 		sig_header = frappe.request.headers.get("stripe-signature")
 		try:

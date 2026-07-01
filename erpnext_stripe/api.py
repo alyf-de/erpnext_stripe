@@ -16,6 +16,7 @@ from erpnext_stripe.operations.create_invoice import (
 )
 from erpnext_stripe.operations.create_product import run as create_product
 from erpnext_stripe.tax_rates import get_tax_rate_data
+from erpnext_stripe.utils import configure_stripe
 
 SETTINGS_DOCTYPE = "ERPNext Stripe Settings"
 
@@ -197,7 +198,7 @@ def init_stripe():
 	frappe.has_permission("ERPNext Stripe Settings", ptype="write", throw=True)
 
 	settings = frappe.get_single("ERPNext Stripe Settings")
-	stripe.api_key = settings.get_password("api_key")
+	configure_stripe(settings.get_password("api_key"))
 
 
 def _publish_import_progress(current: int, total: int, title: str):

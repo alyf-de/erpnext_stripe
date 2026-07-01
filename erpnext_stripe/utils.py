@@ -1,5 +1,13 @@
 import frappe
+import stripe
 from frappe.utils import validate_email_address
+
+STRIPE_API_VERSION = "2026-05-27.dahlia"
+
+
+def configure_stripe(api_key: str):
+	stripe.api_key = api_key
+	stripe.api_version = STRIPE_API_VERSION
 
 
 def get_valid_contact_email(email: str | None) -> str | None:
