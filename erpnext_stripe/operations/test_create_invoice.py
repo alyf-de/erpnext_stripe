@@ -13,6 +13,7 @@ from erpnext_stripe.operations.create_invoice import (
 	_get_rate,
 	_get_tax_rate_id,
 	_set_posting_datetime,
+	_set_subscription_period,
 	run,
 )
 
@@ -197,6 +198,23 @@ class TestCreateInvoice(unittest.TestCase):
 		self.assertEqual(invoice_doc.set_posting_time, 1)
 		self.assertEqual(invoice_doc.posting_date, datetime.date(2024, 1, 1))
 		self.assertFalse(hasattr(invoice_doc, "posting_time"))
+
+	def test_sets_subscription_period_from_invoice_lines(self):
+		invoice = _stripe_object(
+			lines={
+				"data": [
+					{"period": {"start": 1_704_067_200, "end": 1_706_745_600}},
+					{"period": {"start": 1_706_745_600, "end": 1_709_251_200}},
+				]
+			}
+		)
+		invoice_doc = _invoice_doc()
+
+		with patch("erpnext_stripe.operations.create_invoice.get_system_timezone", return_value="UTC"):
+			_set_subscription_period(invoice_doc, invoice)
+
+		self.assertEqual(invoice_doc.from_date, datetime.date(2024, 1, 1))
+		self.assertEqual(invoice_doc.to_date, datetime.date(2024, 2, 29))
 
 	def test_reads_current_pricing_shape(self):
 		line = _line_item(

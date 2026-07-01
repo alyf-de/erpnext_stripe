@@ -71,6 +71,7 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False) -> "SalesInv
 	invoice_doc.project = settings.project
 	invoice_doc.selling_price_list = settings.price_list
 	_set_posting_datetime(invoice_doc, invoice)
+	_set_subscription_period(invoice_doc, invoice)
 
 	for line in invoice.lines.data:
 		product_id = _get_product_id(line)
@@ -200,6 +201,38 @@ def _get_invoice_accounting_timestamp(invoice: "StripeInvoice") -> int | None:
 		return finalized_at
 
 	return getattr(invoice, "created", None)
+
+
+def _set_subscription_period(invoice_doc: "SalesInvoice", invoice: "StripeInvoice"):
+	period = _get_invoice_line_period(invoice)
+	if not period:
+		return
+
+	period_start, period_end = period
+	invoice_doc.from_date = _get_timestamp_date(period_start)
+	invoice_doc.to_date = _get_timestamp_date(period_end - 1)
+
+
+def _get_invoice_line_period(invoice: "StripeInvoice") -> tuple[int, int] | None:
+	periods = []
+	for line in invoice.lines.data:
+		period = getattr(line, "period", None)
+		period_start = getattr(period, "start", None)
+		period_end = getattr(period, "end", None)
+		if period_start is None or period_end is None or period_end <= period_start:
+			continue
+
+		periods.append((period_start, period_end))
+
+	if not periods:
+		return None
+
+	return min(period[0] for period in periods), max(period[1] for period in periods)
+
+
+def _get_timestamp_date(timestamp: int):
+	system_timezone = ZoneInfo(get_system_timezone())
+	return getdate(datetime.fromtimestamp(timestamp, tz=system_timezone))
 
 
 def _ensure_customer(stripe_customer_id: str, ignore_permissions: bool = False):
