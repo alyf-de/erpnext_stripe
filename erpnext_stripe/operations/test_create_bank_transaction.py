@@ -101,6 +101,41 @@ class TestCreateBankTransaction(unittest.TestCase):
 
 		self.assertEqual(values["reference_number"], "INV-001")
 
+	def test_resolves_payment_source_invoice_number_through_payment_intent(self):
+		balance_transaction = _stripe_object(
+			id="txn_test",
+			created=1_704_067_200,
+			currency="eur",
+			amount=1000,
+			type="charge",
+			reporting_category="charge",
+			description=None,
+		)
+		payment_source = _stripe_object(id="py_test", payment_intent="pi_test")
+		payment_intent = _stripe_object(id="pi_test", invoice=_stripe_object(id="in_test", number="INV-001"))
+		frappe = SimpleNamespace(
+			db=SimpleNamespace(get_value=Mock(return_value="Test Company")),
+			unscrub=lambda value: "Charge",
+		)
+
+		with (
+			patch("erpnext_stripe.operations.create_bank_transaction.frappe", frappe),
+			patch(
+				"erpnext_stripe.operations.create_bank_transaction.get_system_timezone", return_value="UTC"
+			),
+			patch(
+				"erpnext_stripe.operations.create_bank_transaction.stripe.PaymentIntent.retrieve",
+				return_value=payment_intent,
+			),
+		):
+			values = _get_bank_transaction_values(
+				balance_transaction,
+				"Stripe Clearing",
+				source=payment_source,
+			)
+
+		self.assertEqual(values["reference_number"], "INV-001")
+
 	def test_builds_withdrawal_from_negative_balance_transaction(self):
 		balance_transaction = _stripe_object(
 			id="txn_payout",
