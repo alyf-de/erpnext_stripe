@@ -214,6 +214,9 @@ def _get_source_invoice_reference(source) -> str | None:
 	if invoice_reference := _get_invoice_reference(_get_invoice(invoice)):
 		return invoice_reference
 
+	if invoice_reference := _get_payment_details_invoice_reference(source):
+		return invoice_reference
+
 	payment_intent = getattr(source, "payment_intent", None)
 	if payment_intent_reference := _get_payment_intent_invoice_reference(payment_intent):
 		return payment_intent_reference
@@ -239,7 +242,15 @@ def _get_payment_intent_invoice_reference(payment_intent) -> str | None:
 	if isinstance(payment_intent, str):
 		payment_intent = stripe.PaymentIntent.retrieve(payment_intent, expand=["invoice"])
 
-	return _get_invoice_reference(_get_invoice(getattr(payment_intent, "invoice", None)))
+	return _get_invoice_reference(_get_invoice(getattr(payment_intent, "invoice", None))) or (
+		_get_payment_details_invoice_reference(payment_intent)
+	)
+
+
+def _get_payment_details_invoice_reference(source) -> str | None:
+	payment_details = getattr(source, "payment_details", None)
+	invoice_id = getattr(payment_details, "order_reference", None) if payment_details else None
+	return _get_invoice_reference(_get_invoice(invoice_id))
 
 
 def _get_charge_invoice_reference(charge) -> str | None:

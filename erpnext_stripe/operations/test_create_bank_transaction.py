@@ -112,7 +112,12 @@ class TestCreateBankTransaction(unittest.TestCase):
 			description=None,
 		)
 		payment_source = _stripe_object(id="py_test", payment_intent="pi_test")
-		payment_intent = _stripe_object(id="pi_test", invoice=_stripe_object(id="in_test", number="INV-001"))
+		payment_intent = _stripe_object(
+			id="pi_test",
+			invoice=None,
+			payment_details={"order_reference": "in_test"},
+		)
+		stripe_invoice = _stripe_object(id="in_test", number="INV-001")
 		frappe = SimpleNamespace(
 			db=SimpleNamespace(get_value=Mock(return_value="Test Company")),
 			unscrub=lambda value: "Charge",
@@ -126,6 +131,10 @@ class TestCreateBankTransaction(unittest.TestCase):
 			patch(
 				"erpnext_stripe.operations.create_bank_transaction.stripe.PaymentIntent.retrieve",
 				return_value=payment_intent,
+			),
+			patch(
+				"erpnext_stripe.operations.create_bank_transaction.stripe.Invoice.retrieve",
+				return_value=stripe_invoice,
 			),
 		):
 			values = _get_bank_transaction_values(
