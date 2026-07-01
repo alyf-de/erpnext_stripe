@@ -14,7 +14,8 @@
   "price_list",
   "tax_configurations",
   "payments_section",
-  "stripe_bank_account"
+  "stripe_bank_account",
+  "supplier"
  ],
  "fields": [
   {
@@ -74,13 +75,19 @@
    "label": "Price List",
    "link_filters": "[[\"Price List\",\"selling\",\"=\",1]]",
    "options": "Price List"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-31 04:39:44.763972",
+ "modified": "2026-07-01 21:21:08.030888",
  "modified_by": "Administrator",
  "module": "ERPNext Stripe",
  "name": "ERPNext Stripe Settings",

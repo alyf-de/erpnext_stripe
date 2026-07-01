@@ -71,6 +71,7 @@ def run(
 			settings.stripe_bank_account,
 			source=source,
 			invoice=invoice,
+			supplier=settings.supplier,
 		)
 	)
 	bank_transaction.flags.ignore_permissions = ignore_permissions
@@ -95,8 +96,10 @@ def _get_bank_transaction_values(
 	bank_account: str,
 	source=None,
 	invoice: "StripeInvoice | None" = None,
+	supplier: str | None = None,
 ) -> dict:
 	amount = _get_amount(balance_transaction.amount)
+	reference_number = _get_reference_number(balance_transaction, source=source, invoice=invoice)
 	values = {
 		"bank_account": bank_account,
 		"company": frappe.db.get_value("Bank Account", bank_account, "company"),
@@ -107,7 +110,6 @@ def _get_bank_transaction_values(
 		"transaction_type": _get_transaction_type(balance_transaction),
 	}
 
-	reference_number = _get_reference_number(balance_transaction, source=source, invoice=invoice)
 	if reference_number:
 		values["reference_number"] = reference_number
 
@@ -116,13 +118,8 @@ def _get_bank_transaction_values(
 	else:
 		values["withdrawal"] = abs(amount)
 
-	if party := _get_customer_party(source, invoice):
-		values.update(
-			{
-				"party_type": "Customer",
-				"party": party,
-			}
-		)
+	if party := _get_party(balance_transaction, source=source, invoice=invoice, supplier=supplier):
+		values.update(party)
 
 	return values
 
@@ -261,6 +258,40 @@ def _get_charge_invoice_reference(charge) -> str | None:
 		charge = stripe.Charge.retrieve(charge, expand=["payment_intent.invoice"])
 
 	return _get_source_invoice_reference(charge)
+
+
+def _get_party(
+	balance_transaction: "BalanceTransaction",
+	source=None,
+	invoice: "StripeInvoice | None" = None,
+	supplier: str | None = None,
+) -> dict | None:
+	if _is_invoice_transaction(source, invoice):
+		if customer := _get_customer_party(source, invoice):
+			return {
+				"party_type": "Customer",
+				"party": customer,
+			}
+
+		return None
+
+	if supplier and not _is_payout(balance_transaction):
+		return {
+			"party_type": "Supplier",
+			"party": supplier,
+		}
+
+	return None
+
+
+def _is_invoice_transaction(source=None, invoice: "StripeInvoice | None" = None) -> bool:
+	return bool(_get_invoice_reference(invoice) or _get_source_invoice_reference(source))
+
+
+def _is_payout(balance_transaction: "BalanceTransaction") -> bool:
+	reporting_category = getattr(balance_transaction, "reporting_category", None) or ""
+	transaction_type = getattr(balance_transaction, "type", None) or ""
+	return reporting_category == "payout" or transaction_type.startswith("payout")
 
 
 def _get_customer_party(

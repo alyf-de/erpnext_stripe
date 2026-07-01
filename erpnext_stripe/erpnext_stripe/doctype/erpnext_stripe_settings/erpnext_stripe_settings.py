@@ -23,6 +23,7 @@ class ERPNextStripeSettings(Document):
 		price_list: DF.Link | None
 		project: DF.Link | None
 		stripe_bank_account: DF.Link | None
+		supplier: DF.Link | None
 		tax_configurations: DF.Table[ERPNextStripeTaxConfig]
 		webhook_secret: DF.Password | None
 

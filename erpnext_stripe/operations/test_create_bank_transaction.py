@@ -174,6 +174,66 @@ class TestCreateBankTransaction(unittest.TestCase):
 		self.assertNotIn("reference_number", values)
 		self.assertEqual(values["transaction_type"], "Stripe Payout")
 
+	def test_sets_supplier_for_non_invoice_non_payout_transactions(self):
+		balance_transaction = _stripe_object(
+			id="txn_fee",
+			created=1_704_067_200,
+			currency="eur",
+			amount=-42,
+			type="stripe_fee",
+			reporting_category="fee",
+			description="Automatic Taxes",
+		)
+		frappe = SimpleNamespace(
+			db=SimpleNamespace(get_value=Mock(return_value="Test Company")),
+			unscrub=lambda value: value.replace("_", " ").title(),
+		)
+
+		with (
+			patch("erpnext_stripe.operations.create_bank_transaction.frappe", frappe),
+			patch(
+				"erpnext_stripe.operations.create_bank_transaction.get_system_timezone", return_value="UTC"
+			),
+		):
+			values = _get_bank_transaction_values(
+				balance_transaction,
+				"Stripe Clearing",
+				supplier="Stripe Supplier",
+			)
+
+		self.assertEqual(values["party_type"], "Supplier")
+		self.assertEqual(values["party"], "Stripe Supplier")
+
+	def test_does_not_set_supplier_for_payouts(self):
+		balance_transaction = _stripe_object(
+			id="txn_payout",
+			created=1_704_067_200,
+			currency="eur",
+			amount=-2500,
+			type="payout",
+			reporting_category="payout",
+			description="STRIPE PAYOUT",
+		)
+		frappe = SimpleNamespace(
+			db=SimpleNamespace(get_value=Mock(return_value="Test Company")),
+			unscrub=lambda value: "Payout",
+		)
+
+		with (
+			patch("erpnext_stripe.operations.create_bank_transaction.frappe", frappe),
+			patch(
+				"erpnext_stripe.operations.create_bank_transaction.get_system_timezone", return_value="UTC"
+			),
+		):
+			values = _get_bank_transaction_values(
+				balance_transaction,
+				"Stripe Clearing",
+				supplier="Stripe Supplier",
+			)
+
+		self.assertNotIn("party_type", values)
+		self.assertNotIn("party", values)
+
 	def test_skips_existing_bank_transaction(self):
 		balance_transaction = _stripe_object(
 			id="txn_test",
