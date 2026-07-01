@@ -283,6 +283,15 @@ function open_date_range_import_dialog(options) {
 		title: options.title,
 		fields: [
 			{
+				fieldname: "timespan",
+				label: __("Timespan"),
+				fieldtype: "Select",
+				options: get_past_timespan_options(),
+				change() {
+					update_date_range_from_timespan(dialog, this.get_value());
+				},
+			},
+			{
 				fieldname: "from_date",
 				label: __("From Date"),
 				fieldtype: "Date",
@@ -310,6 +319,149 @@ function open_date_range_import_dialog(options) {
 	});
 
 	dialog.show();
+	update_date_range_from_timespan(dialog, dialog.get_value("timespan"));
+}
+
+function get_past_timespan_options() {
+	return [
+		"",
+		{
+			label: __("Today"),
+			value: "today",
+		},
+		{
+			label: __("Yesterday"),
+			value: "yesterday",
+		},
+		{
+			label: __("This Week"),
+			value: "this week",
+		},
+		{
+			label: __("This Month"),
+			value: "this month",
+		},
+		{
+			label: __("This Quarter"),
+			value: "this quarter",
+		},
+		{
+			label: __("This Year"),
+			value: "this year",
+		},
+		{
+			label: __("YTD"),
+			value: "ytd",
+		},
+		{
+			label: __("Last 7 Days"),
+			value: "last 7 days",
+		},
+		{
+			label: __("Last 14 Days"),
+			value: "last 14 days",
+		},
+		{
+			label: __("Last 30 Days"),
+			value: "last 30 days",
+		},
+		{
+			label: __("Last 90 Days"),
+			value: "last 90 days",
+		},
+		{
+			label: __("Last Week"),
+			value: "last week",
+		},
+		{
+			label: __("Last Month"),
+			value: "last month",
+		},
+		{
+			label: __("Last Quarter"),
+			value: "last quarter",
+		},
+		{
+			label: __("Last 6 Months"),
+			value: "last 6 months",
+		},
+		{
+			label: __("Last Year"),
+			value: "last year",
+		},
+	];
+}
+
+function get_date_range_from_timespan(timespan) {
+	const today = frappe.datetime.now_date();
+	const last_week = frappe.datetime.add_days(today, -7);
+	const last_month = frappe.datetime.add_months(today, -1);
+	const last_quarter = frappe.datetime.add_months(today, -3);
+	const last_six_months = frappe.datetime.add_months(today, -6);
+	const last_year = frappe.datetime.add_months(today, -12);
+	const format_date = (date) => moment(date).format();
+
+	const date_range_map = {
+		"last 7 days": [frappe.datetime.add_days(today, -7), today],
+		"last 14 days": [frappe.datetime.add_days(today, -14), today],
+		"last 30 days": [frappe.datetime.add_days(today, -30), today],
+		"last 90 days": [frappe.datetime.add_days(today, -90), today],
+		"last week": [
+			format_date(moment(last_week).startOf("week")),
+			format_date(moment(last_week).endOf("week")),
+		],
+		"last month": [
+			format_date(moment(last_month).startOf("month")),
+			format_date(moment(last_month).endOf("month")),
+		],
+		"last quarter": [
+			format_date(moment(last_quarter).startOf("quarter")),
+			format_date(moment(last_quarter).endOf("quarter")),
+		],
+		"last 6 months": [
+			format_date(moment(last_six_months).startOf("quarter")),
+			format_date(moment(last_quarter).endOf("quarter")),
+		],
+		"last year": [
+			format_date(moment(last_year).startOf("year")),
+			format_date(moment(last_year).endOf("year")),
+		],
+		yesterday: [frappe.datetime.add_days(today, -1), frappe.datetime.add_days(today, -1)],
+		today: [today, today],
+		"this week": [frappe.datetime.week_start(), frappe.datetime.week_end()],
+		"this month": [frappe.datetime.month_start(), frappe.datetime.month_end()],
+		"this quarter": [frappe.datetime.quarter_start(), frappe.datetime.quarter_end()],
+		"this year": [frappe.datetime.year_start(), frappe.datetime.year_end()],
+		ytd: [frappe.datetime.year_start(), today],
+	};
+
+	return date_range_map[timespan];
+}
+
+function set_date_range_from_timespan(dialog, timespan) {
+	if (!timespan) {
+		return;
+	}
+
+	const date_range = get_date_range_from_timespan(timespan);
+	if (!date_range) {
+		return;
+	}
+
+	dialog.set_values({
+		from_date: date_range[0],
+		to_date: date_range[1],
+	});
+}
+
+function update_date_range_from_timespan(dialog, timespan) {
+	set_date_range_from_timespan(dialog, timespan);
+	set_date_fields_read_only(dialog, Boolean(timespan));
+}
+
+function set_date_fields_read_only(dialog, read_only) {
+	dialog.set_df_property("from_date", "read_only", read_only);
+	dialog.set_df_property("to_date", "read_only", read_only);
 }
 
 function run_import(dialog, options, args) {
