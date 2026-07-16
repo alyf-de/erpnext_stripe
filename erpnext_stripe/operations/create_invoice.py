@@ -30,7 +30,7 @@ class MissingTaxAccountError(frappe.ValidationError):
 		self.tax_rate_id = tax_rate_id
 
 
-def run(invoice: "StripeInvoice", ignore_permissions: bool = False) -> "SalesInvoice | None":
+def run(invoice: "StripeInvoice") -> "SalesInvoice | None":
 	if frappe.db.exists("Sales Invoice", {"stripe_id": invoice.id}):
 		return
 
@@ -46,17 +46,13 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False) -> "SalesInv
 			except stripe.InvalidRequestError:
 				frappe.log_error(title=f"Stripe Invoice: Customer {invoice.customer} not found")
 				return
-			create_lead(stripe_customer, ignore_permissions=ignore_permissions)
+			create_lead(stripe_customer)
 		return
 
-	_ensure_customer(invoice.customer, ignore_permissions=ignore_permissions)
+	_ensure_customer(invoice.customer)
 
 	settings = frappe.get_single("ERPNext Stripe Settings")
-	tax_rows = _get_invoice_tax_rows(
-		invoice,
-		settings,
-		ignore_permissions=ignore_permissions,
-	)
+	tax_rows = _get_invoice_tax_rows(invoice, settings)
 
 	invoice_doc: SalesInvoice = frappe.new_doc("Sales Invoice")
 	invoice_doc.stripe_id = invoice.id
@@ -82,12 +78,12 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False) -> "SalesInv
 				stripe_product = None
 
 			if stripe_product:
-				create_product(stripe_product, ignore_permissions=ignore_permissions)
+				create_product(stripe_product)
 			else:
-				_create_minimal_item(product_id, line, ignore_permissions=ignore_permissions)
+				_create_minimal_item(product_id, line)
 
 		item_code = frappe.db.get_value("Item", {"stripe_id": product_id})
-		_ensure_sales_item(item_code, ignore_permissions=ignore_permissions)
+		_ensure_sales_item(item_code)
 		quantity = _get_quantity(line)
 		rate = _get_rate(line, quantity)
 
@@ -112,11 +108,10 @@ def run(invoice: "StripeInvoice", ignore_permissions: bool = False) -> "SalesInv
 			},
 		)
 
-	invoice_doc.flags.ignore_permissions = ignore_permissions
 	invoice_doc.set_missing_values()
 	invoice_doc.payment_terms_template = ""
 	invoice_doc.payment_schedule = []
-	invoice_doc.save(ignore_permissions=ignore_permissions)
+	invoice_doc.save()
 
 	try:
 		invoice_doc.submit()
@@ -235,7 +230,7 @@ def _get_timestamp_date(timestamp: int):
 	return getdate(datetime.fromtimestamp(timestamp, tz=system_timezone))
 
 
-def _ensure_customer(stripe_customer_id: str, ignore_permissions: bool = False):
+def _ensure_customer(stripe_customer_id: str):
 	"""Ensure a Customer exists for the given Stripe customer ID, promoting from Lead if needed."""
 	if frappe.db.exists("Customer", {"stripe_id": stripe_customer_id}):
 		return
@@ -248,9 +243,9 @@ def _ensure_customer(stripe_customer_id: str, ignore_permissions: bool = False):
 	lead_name = frappe.db.get_value("Lead", {"stripe_id": stripe_customer_id})
 	if lead_name:
 		# Promote Lead to Customer: create Customer with lead_name link
-		create_customer(stripe_customer, ignore_permissions=ignore_permissions, lead_name=lead_name)
+		create_customer(stripe_customer, lead_name=lead_name)
 	else:
-		create_customer(stripe_customer, ignore_permissions=ignore_permissions)
+		create_customer(stripe_customer)
 
 
 def _get_tax_config(settings) -> dict:
@@ -260,7 +255,6 @@ def _get_tax_config(settings) -> dict:
 def _get_invoice_tax_rows(
 	invoice: "StripeInvoice",
 	settings,
-	ignore_permissions: bool = False,
 ) -> list[tuple[str, object]]:
 	"""Resolve invoice tax rates against ERPNext Stripe Settings.
 
@@ -280,9 +274,7 @@ def _get_invoice_tax_rows(
 		if not tax_rate_id or tax_rate_id in seen:
 			continue
 
-		config = tax_config.get(tax_rate_id) or _import_tax_config_for_rate(
-			tax_rate_id, settings, ignore_permissions=ignore_permissions
-		)
+		config = tax_config.get(tax_rate_id) or _import_tax_config_for_rate(tax_rate_id, settings)
 		if not config:
 			frappe.throw(
 				_(
@@ -300,7 +292,7 @@ def _get_invoice_tax_rows(
 	return tax_rows
 
 
-def _import_tax_config_for_rate(tax_rate_id: str, settings, ignore_permissions: bool = False):
+def _import_tax_config_for_rate(tax_rate_id: str, settings):
 	try:
 		tax_rate = stripe.TaxRate.retrieve(tax_rate_id)
 	except stripe.InvalidRequestError:
@@ -308,7 +300,7 @@ def _import_tax_config_for_rate(tax_rate_id: str, settings, ignore_permissions: 
 
 	matching_config = _get_matching_tax_config(settings.tax_configurations, tax_rate)
 	account = matching_config.account if matching_config else None
-	return _import_tax_config(settings, tax_rate, account=account, ignore_permissions=ignore_permissions)
+	return _import_tax_config(settings, tax_rate, account=account)
 
 
 def _get_matching_tax_config(configs, tax_rate):
@@ -317,7 +309,7 @@ def _get_matching_tax_config(configs, tax_rate):
 		return matches[0]
 
 
-def _import_tax_config(settings, tax_rate, account: str | None = None, ignore_permissions: bool = False):
+def _import_tax_config(settings, tax_rate, account: str | None = None):
 	config = settings.append(
 		"tax_configurations",
 		{
@@ -328,7 +320,7 @@ def _import_tax_config(settings, tax_rate, account: str | None = None, ignore_pe
 			"account": account,
 		},
 	)
-	settings.save(ignore_permissions=ignore_permissions)
+	settings.save()
 	return config
 
 
@@ -361,7 +353,7 @@ def _get_tax_rate_id(tax) -> str | None:
 	return getattr(tax_rate, "id", None)
 
 
-def _create_minimal_item(product_id: str, line, ignore_permissions: bool = False):
+def _create_minimal_item(product_id: str, line):
 	"""Create a minimal Item from invoice line data when the product can't be fetched from Stripe."""
 	from erpnext_stripe.operations.create_product import _resolve_item_group, _resolve_stock_uom
 
@@ -378,10 +370,10 @@ def _create_minimal_item(product_id: str, line, ignore_permissions: bool = False
 
 	item_doc.is_stock_item = 0
 	item_doc.is_sales_item = 1
-	item_doc.save(ignore_permissions=ignore_permissions)
+	item_doc.save()
 
 
-def _ensure_sales_item(item_code: str, ignore_permissions: bool = False):
+def _ensure_sales_item(item_code: str):
 	"""Any Item linked to a Stripe product must be a sales item, since it appears on Stripe invoices.
 
 	This corrects existing Items that were linked (e.g. manually) without the flag set.
@@ -391,7 +383,7 @@ def _ensure_sales_item(item_code: str, ignore_permissions: bool = False):
 
 	item_doc = frappe.get_doc("Item", item_code)
 	item_doc.is_sales_item = 1
-	item_doc.save(ignore_permissions=ignore_permissions)
+	item_doc.save()
 
 
 def _attach_invoice_pdf(invoice: "StripeInvoice", invoice_doc: "SalesInvoice"):
@@ -415,4 +407,4 @@ def _attach_invoice_pdf(invoice: "StripeInvoice", invoice_doc: "SalesInvoice"):
 	file_doc.attached_to_doctype = "Sales Invoice"
 	file_doc.attached_to_name = invoice_doc.name
 	file_doc.is_private = 1
-	file_doc.save(ignore_permissions=True)
+	file_doc.save()

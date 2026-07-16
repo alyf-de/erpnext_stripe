@@ -19,16 +19,16 @@ from erpnext_stripe.utils import (
 )
 
 
-def handle(event: "Event", ignore_permissions: bool = False):
+def handle(event: "Event"):
 	stripe_customer = event.data.object
 
 	if frappe.db.exists("Customer", {"stripe_id": stripe_customer.id}):
-		_update_customer(stripe_customer, ignore_permissions=ignore_permissions)
+		_update_customer(stripe_customer)
 	elif frappe.db.exists("Lead", {"stripe_id": stripe_customer.id}):
-		_update_lead(stripe_customer, ignore_permissions=ignore_permissions)
+		_update_lead(stripe_customer)
 
 
-def _update_lead(stripe_customer, ignore_permissions: bool = False):
+def _update_lead(stripe_customer):
 	customer_address = get_stripe_customer_address(stripe_customer)
 	contact_phone = get_stripe_customer_phone(stripe_customer)
 	valid_email = get_valid_contact_email(stripe_customer.email)
@@ -58,10 +58,10 @@ def _update_lead(stripe_customer, ignore_permissions: bool = False):
 		lead_doc.state = customer_address.state
 		lead_doc.country = get_country_name_by_code(customer_address.country)
 
-	lead_doc.save(ignore_permissions=ignore_permissions)
+	lead_doc.save()
 
 
-def _update_customer(stripe_customer, ignore_permissions: bool = False):
+def _update_customer(stripe_customer):
 	customer_address = get_stripe_customer_address(stripe_customer)
 	contact_display_name = get_stripe_customer_contact_name(stripe_customer)
 	contact_phone = get_stripe_customer_phone(stripe_customer)
@@ -93,7 +93,7 @@ def _update_customer(stripe_customer, ignore_permissions: bool = False):
 	except stripe.InvalidRequestError:
 		pass
 
-	customer_doc.save(ignore_permissions=ignore_permissions)
+	customer_doc.save()
 
 	if customer_address:
 		address_name = frappe.db.get_value(
@@ -113,7 +113,7 @@ def _update_customer(stripe_customer, ignore_permissions: bool = False):
 		address_doc.state = customer_address.state
 		address_doc.pincode = customer_address.postal_code
 		address_doc.country = get_country_name_by_code(customer_address.country)
-		address_doc.save(ignore_permissions=ignore_permissions)
+		address_doc.save()
 
 	if valid_email or contact_phone:
 		contact_docname = frappe.db.get_value(
@@ -141,4 +141,4 @@ def _update_customer(stripe_customer, ignore_permissions: bool = False):
 			if not existing_phone:
 				contact_doc.append("phone_nos", {"phone": contact_phone, "is_primary_phone": 1})
 
-		contact_doc.save(ignore_permissions=ignore_permissions)
+		contact_doc.save()

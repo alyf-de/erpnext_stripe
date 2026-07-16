@@ -7,8 +7,8 @@ if TYPE_CHECKING:
 from erpnext_stripe.operations.create_invoice import run as create_invoice
 
 
-def handle(event: "Event", ignore_permissions: bool = False):
+def handle(event: "Event"):
 	"""
 	Creates a Sales Invoice from a Stripe Invoice. Submit. Attach PDF.
 	"""
-	create_invoice(event.data.object, ignore_permissions=ignore_permissions)
+	create_invoice(event.data.object)

@@ -18,7 +18,7 @@ from erpnext_stripe.utils import (
 )
 
 
-def run(stripe_customer: "StripeCustomer", ignore_permissions: bool = False):
+def run(stripe_customer: "StripeCustomer"):
 	if frappe.db.exists("Lead", {"stripe_id": stripe_customer.id}):
 		return
 
@@ -54,4 +54,4 @@ def run(stripe_customer: "StripeCustomer", ignore_permissions: bool = False):
 		lead_doc.state = customer_address.state
 		lead_doc.country = get_country_name_by_code(customer_address.country)
 
-	lead_doc.save(ignore_permissions=ignore_permissions)
+	lead_doc.save()

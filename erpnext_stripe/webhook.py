@@ -41,11 +41,15 @@ def handler():
 		frappe.log_error(title=f"Stripe Webhook: Unhandled Event Type {event['type'] if event else 'None'}")
 		return {"success": False}
 
+	# Authenticated webhook; run as Administrator so ERPNext Account permission
+	# checks (e.g. get_party_account) succeed.
+	frappe.set_user("Administrator")
+
 	handler_file = EVENT_HANDLERS[event["type"]]
 	handler = frappe.get_attr(f"erpnext_stripe.handlers.{handler_file}.handle")
 
 	try:
-		handler(event, ignore_permissions=True)
+		handler(event)
 	except Exception:
 		frappe.log_error(title="Stripe Webhook: Handler Error")
 		return {"success": False}

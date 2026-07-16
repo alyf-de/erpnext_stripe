@@ -14,34 +14,29 @@ from frappe.utils import get_system_timezone
 from frappe.utils.data import flt, getdate
 
 
-def run_for_invoice(
-	invoice: "StripeInvoice",
-	ignore_permissions: bool = False,
-):
+def run_for_invoice(invoice: "StripeInvoice"):
 	charge = _get_charge(invoice)
 	if not charge:
 		return None
 
-	return run_for_charge(charge, invoice=invoice, ignore_permissions=ignore_permissions)
+	return run_for_charge(charge, invoice=invoice)
 
 
 def run_for_charge(
 	charge: "Charge",
 	invoice: "StripeInvoice | None" = None,
-	ignore_permissions: bool = False,
 ):
 	balance_transaction = _get_charge_balance_transaction(charge)
 	if not balance_transaction:
 		return None
 
-	return run(balance_transaction, source=charge, invoice=invoice, ignore_permissions=ignore_permissions)
+	return run(balance_transaction, source=charge, invoice=invoice)
 
 
 def run(
 	balance_transaction: "BalanceTransaction",
 	source=None,
 	invoice: "StripeInvoice | None" = None,
-	ignore_permissions: bool = False,
 ):
 	if not getattr(balance_transaction, "id", None):
 		return None
@@ -74,8 +69,7 @@ def run(
 			supplier=settings.supplier,
 		)
 	)
-	bank_transaction.flags.ignore_permissions = ignore_permissions
-	bank_transaction.insert(ignore_permissions=ignore_permissions)
+	bank_transaction.insert()
 	bank_transaction.submit()
 	return bank_transaction
 

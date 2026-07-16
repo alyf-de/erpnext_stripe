@@ -52,7 +52,6 @@ class _Settings:
 	def __init__(self, tax_configurations=None):
 		self.tax_configurations = tax_configurations or []
 		self.saved = False
-		self.ignore_permissions = False
 
 	def append(self, fieldname, value):
 		assert fieldname == "tax_configurations", fieldname
@@ -60,9 +59,8 @@ class _Settings:
 		self.tax_configurations.append(row)
 		return row
 
-	def save(self, ignore_permissions=False):
+	def save(self):
 		self.saved = True
-		self.ignore_permissions = ignore_permissions
 
 
 class _SalesInvoiceDoc:
@@ -83,8 +81,7 @@ class _SalesInvoiceDoc:
 		self.payment_terms_template = "Default Customer Terms"
 		self.payment_schedule = [_stripe_object(due_date="2026-06-14")]
 
-	def save(self, ignore_permissions=False):
-		self.saved_ignore_permissions = ignore_permissions
+	def save(self):
 		self.saved_due_date = self.due_date
 		self.saved_payment_terms_template = self.payment_terms_template
 		self.saved_payment_schedule = self.payment_schedule
@@ -139,7 +136,7 @@ class TestCreateInvoice(unittest.TestCase):
 			patch("erpnext_stripe.operations.create_invoice.frappe.new_doc", return_value=invoice_doc),
 			patch("erpnext_stripe.operations.create_invoice.frappe.db", db),
 		):
-			result = run(invoice, ignore_permissions=True)
+			result = run(invoice)
 
 		self.assertEqual(result, invoice_doc)
 		self.assertEqual(invoice_doc.payment_terms_template_before_missing, "")
@@ -147,7 +144,6 @@ class TestCreateInvoice(unittest.TestCase):
 		self.assertEqual(invoice_doc.saved_payment_terms_template, "")
 		self.assertEqual(invoice_doc.saved_payment_schedule, [])
 		self.assertEqual(invoice_doc.ignore_default_payment_terms_template, 1)
-		self.assertTrue(invoice_doc.saved_ignore_permissions)
 
 	def test_sets_posting_datetime_from_effective_at_in_system_timezone(self):
 		invoice = _stripe_object(
@@ -366,11 +362,9 @@ class TestCreateInvoice(unittest.TestCase):
 			tax_rows = _get_invoice_tax_rows(
 				invoice,
 				settings=settings,
-				ignore_permissions=True,
 			)
 
 		self.assertTrue(settings.saved)
-		self.assertTrue(settings.ignore_permissions)
 		imported_config = settings.tax_configurations[-1]
 		self.assertEqual(imported_config.stripe_id, "txr_new_19")
 		self.assertEqual(imported_config.account, "VAT 19")
@@ -403,7 +397,6 @@ class TestCreateInvoice(unittest.TestCase):
 				_get_invoice_tax_rows(
 					invoice,
 					settings=settings,
-					ignore_permissions=True,
 				)
 
 		self.assertEqual(cm.exception.tax_rate_id, "txr_new_19")

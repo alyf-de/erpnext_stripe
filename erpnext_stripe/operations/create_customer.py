@@ -22,7 +22,6 @@ from erpnext_stripe.utils import (
 
 def run(
 	stripe_customer: "StripeCustomer",
-	ignore_permissions: bool = False,
 	lead_name: str | None = None,
 ):
 	if frappe.db.exists("Customer", {"stripe_id": stripe_customer.id}):
@@ -61,7 +60,7 @@ def run(
 	except stripe.InvalidRequestError:
 		pass
 
-	customer_doc.save(ignore_permissions=ignore_permissions)
+	customer_doc.save()
 
 	if customer_address:
 		address_doc = frappe.new_doc("Address")
@@ -72,7 +71,7 @@ def run(
 		address_doc.pincode = customer_address.postal_code
 		address_doc.country = get_country_name_by_code(customer_address.country)
 		address_doc.append("links", {"link_doctype": "Customer", "link_name": customer_doc.name})
-		address_doc.save(ignore_permissions=ignore_permissions)
+		address_doc.save()
 
 	if valid_email or contact_phone:
 		contact_doc = frappe.new_doc("Contact")
@@ -84,4 +83,4 @@ def run(
 		if contact_phone:
 			contact_doc.append("phone_nos", {"phone": contact_phone, "is_primary_phone": 1})
 		contact_doc.append("links", {"link_doctype": "Customer", "link_name": customer_doc.name})
-		contact_doc.save(ignore_permissions=ignore_permissions)
+		contact_doc.save()
