@@ -145,6 +145,55 @@ class TestCreateBankTransaction(unittest.TestCase):
 
 		self.assertEqual(values["reference_number"], "INV-001")
 
+	def test_falls_back_when_payment_details_invoice_is_missing(self):
+		import stripe
+
+		balance_transaction = _stripe_object(
+			id="txn_test",
+			created=1_704_067_200,
+			currency="eur",
+			amount=1000,
+			type="charge",
+			reporting_category="charge",
+			description=None,
+		)
+		payment_source = _stripe_object(id="py_test", payment_intent="pi_test")
+		payment_intent = _stripe_object(
+			id="pi_test",
+			invoice=None,
+			payment_details={"order_reference": "in_missing"},
+		)
+		frappe = SimpleNamespace(
+			db=SimpleNamespace(get_value=Mock(return_value="Test Company")),
+			unscrub=lambda value: "Charge",
+		)
+
+		with (
+			patch("erpnext_stripe.operations.create_bank_transaction.frappe", frappe),
+			patch(
+				"erpnext_stripe.operations.create_bank_transaction.get_system_timezone", return_value="UTC"
+			),
+			patch(
+				"erpnext_stripe.operations.create_bank_transaction.stripe.PaymentIntent.retrieve",
+				return_value=payment_intent,
+			),
+			patch(
+				"erpnext_stripe.operations.create_bank_transaction.stripe.Invoice.retrieve",
+				side_effect=stripe.InvalidRequestError(
+					"No such invoice: 'in_missing'",
+					"id",
+					code="resource_missing",
+				),
+			),
+		):
+			values = _get_bank_transaction_values(
+				balance_transaction,
+				"Stripe Clearing",
+				source=payment_source,
+			)
+
+		self.assertEqual(values["reference_number"], "py_test")
+
 	def test_builds_withdrawal_from_negative_balance_transaction(self):
 		balance_transaction = _stripe_object(
 			id="txn_payout",

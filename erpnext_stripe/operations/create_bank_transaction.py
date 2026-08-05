@@ -220,8 +220,14 @@ def _get_source_invoice_reference(source) -> str | None:
 
 
 def _get_invoice(invoice):
+	if not invoice:
+		return None
+
 	if isinstance(invoice, str):
-		return stripe.Invoice.retrieve(invoice)
+		try:
+			return stripe.Invoice.retrieve(invoice)
+		except stripe.InvalidRequestError:
+			return None
 
 	return invoice
 
