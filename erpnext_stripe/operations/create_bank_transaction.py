@@ -1,4 +1,5 @@
 from datetime import datetime
+from hashlib import sha256
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -49,14 +50,22 @@ def run(
 	if not settings.stripe_bank_account:
 		frappe.throw(_("Please configure Stripe Bank Account in ERPNext Stripe Settings."))
 
-	if frappe.db.exists(
+	existing_bank_transaction = frappe.db.get_value(
 		"Bank Transaction",
 		{
 			"bank_account": settings.stripe_bank_account,
 			"transaction_id": balance_transaction.id,
 		},
-	):
-		return None
+		["name", "company", "date", "currency", "deposit", "withdrawal", "included_fee"],
+		as_dict=True,
+	)
+	if existing_bank_transaction:
+		return _create_legacy_fee_bank_transaction(
+			balance_transaction,
+			existing_bank_transaction,
+			settings.stripe_bank_account,
+			settings.supplier,
+		)
 
 	source = _get_source(balance_transaction, source)
 	bank_transaction = frappe.new_doc("Bank Transaction")
@@ -72,6 +81,61 @@ def run(
 	bank_transaction.insert()
 	bank_transaction.submit()
 	return bank_transaction
+
+
+def _create_legacy_fee_bank_transaction(
+	balance_transaction: "BalanceTransaction",
+	existing_bank_transaction,
+	bank_account: str,
+	supplier: str | None,
+):
+	"""Create a separate fee transaction for a qualifying legacy gross deposit."""
+	if not _is_legacy_gross_deposit(balance_transaction, existing_bank_transaction):
+		return None
+
+	transaction_id = _get_legacy_fee_transaction_id(balance_transaction.id)
+	if frappe.db.exists(
+		"Bank Transaction",
+		{"bank_account": bank_account, "transaction_id": transaction_id},
+	):
+		return None
+
+	values = {
+		"bank_account": bank_account,
+		"company": existing_bank_transaction.company,
+		"date": existing_bank_transaction.date,
+		"currency": existing_bank_transaction.currency,
+		"description": f"Embedded Stripe fee for balance transaction {balance_transaction.id}",
+		"reference_number": balance_transaction.id,
+		"transaction_id": transaction_id,
+		"transaction_type": "Stripe Fee",
+		"withdrawal": _get_amount(balance_transaction.fee),
+	}
+	if supplier:
+		values.update({"party_type": "Supplier", "party": supplier})
+
+	fee_transaction = frappe.new_doc("Bank Transaction")
+	fee_transaction.update(values)
+	fee_transaction.insert()
+	fee_transaction.submit()
+	return fee_transaction
+
+
+def _is_legacy_gross_deposit(balance_transaction: "BalanceTransaction", existing_bank_transaction) -> bool:
+	"""Return whether an existing transaction is a legacy gross deposit without its embedded fee."""
+	return (
+		balance_transaction.amount > 0
+		and getattr(balance_transaction, "fee", 0) > 0
+		and flt(existing_bank_transaction.deposit) == _get_amount(balance_transaction.amount)
+		and not flt(existing_bank_transaction.withdrawal)
+		and not flt(existing_bank_transaction.included_fee)
+	)
+
+
+def _get_legacy_fee_transaction_id(balance_transaction_id: str) -> str:
+	"""Return a deterministic transaction ID for a legacy embedded fee."""
+	transaction_hash = sha256(balance_transaction_id.encode()).hexdigest()
+	return f"erpnext-stripe-embedded-fee:{transaction_hash}"
 
 
 def _get_source(balance_transaction: "BalanceTransaction", source=None):
@@ -92,7 +156,8 @@ def _get_bank_transaction_values(
 	invoice: "StripeInvoice | None" = None,
 	supplier: str | None = None,
 ) -> dict:
-	amount = _get_amount(balance_transaction.amount)
+	embedded_fee = balance_transaction.amount > 0 and getattr(balance_transaction, "fee", 0) > 0
+	amount = _get_amount(balance_transaction.net if embedded_fee else balance_transaction.amount)
 	reference_number = _get_reference_number(balance_transaction, source=source, invoice=invoice)
 	values = {
 		"bank_account": bank_account,
@@ -111,6 +176,9 @@ def _get_bank_transaction_values(
 		values["deposit"] = amount
 	else:
 		values["withdrawal"] = abs(amount)
+
+	if embedded_fee:
+		values["included_fee"] = _get_amount(balance_transaction.fee)
 
 	if party := _get_party(balance_transaction, source=source, invoice=invoice, supplier=supplier):
 		values.update(party)
@@ -226,7 +294,7 @@ def _get_invoice(invoice):
 	if isinstance(invoice, str):
 		try:
 			return stripe.Invoice.retrieve(invoice)
-		except stripe.InvalidRequestError:
+		except stripe.error.InvalidRequestError:
 			return None
 
 	return invoice
