@@ -3,12 +3,12 @@
 
 from unittest.mock import patch
 
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import UnitTestCase
 
 from erpnext_stripe import api
 
 
-class TestERPNextStripeSettings(FrappeTestCase):
+class TestERPNextStripeSettings(UnitTestCase):
 	def test_import_progress_is_scoped_to_settings_document(self):
 		with patch("erpnext_stripe.api.frappe.publish_progress") as publish_progress:
 			api._publish_import_progress(2, 4, "Importing Stripe Customers")
