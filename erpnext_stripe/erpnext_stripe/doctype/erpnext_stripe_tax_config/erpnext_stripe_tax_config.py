@@ -23,4 +23,5 @@ class ERPNextStripeTaxConfig(Document):
 		region: DF.Data | None
 		stripe_id: DF.Data | None
 	# end: auto-generated types
+
 	pass

@@ -26,8 +26,8 @@ class ERPNextStripeSettings(Document):
 		supplier: DF.Link | None
 		tax_configurations: DF.Table[ERPNextStripeTaxConfig]
 		webhook_secret: DF.Password | None
-
 	# end: auto-generated types
+
 	def validate(self):
 		self.set_endpoint_url()
 
