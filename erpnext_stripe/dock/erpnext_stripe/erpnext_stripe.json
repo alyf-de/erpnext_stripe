@@ -9,12 +9,12 @@
    "added": 0,
    "hidden": 0,
    "icon": "credit-card",
-   "link_to": "Stripe",
-   "link_type": "Workspace",
+   "link_to": "ERPNext Stripe",
+   "link_type": "Sidebar",
    "title": "Stripe"
   }
  ],
- "modified": "2026-10-27 18:28:02.645709",
+ "modified": "2026-10-27 19:17:43.615426",
  "modified_by": "Administrator",
  "mount_on": "",
  "name": "erpnext_stripe",

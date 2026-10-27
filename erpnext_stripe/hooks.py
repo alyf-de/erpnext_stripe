@@ -15,7 +15,7 @@ add_to_apps_screen = [
 		"name": app_name,
 		"logo": "/assets/erpnext_stripe/img/logo.png",
 		"title": app_title,
-		"route": "/desk/stripe",
+		"route": "/desk/erpnext-stripe-settings",
 		"has_permission": "erpnext_stripe.permission.has_app_permission",
 	}
 ]
