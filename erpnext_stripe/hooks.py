@@ -10,16 +10,15 @@ app_license = "gpl-3.0"
 
 # required_apps = []
 
-# Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "erpnext_stripe",
-# 		"logo": "/assets/erpnext_stripe/logo.png",
-# 		"title": "ERPNext Stripe",
-# 		"route": "/erpnext_stripe",
-# 		"has_permission": "erpnext_stripe.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": app_name,
+		"logo": "/assets/erpnext_stripe/img/logo.png",
+		"title": app_title,
+		"route": "/desk/stripe",
+		"has_permission": "erpnext_stripe.permission.has_app_permission",
+	}
+]
 
 # Includes in <head>
 # ------------------
