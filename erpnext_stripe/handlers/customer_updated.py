@@ -19,7 +19,7 @@ from erpnext_stripe.utils import (
 )
 
 
-def handle(event: "Event"):
+def handle(event: Event):
 	stripe_customer = event.data.object
 
 	if frappe.db.exists("Customer", {"stripe_id": stripe_customer.id}):

@@ -7,7 +7,7 @@ if TYPE_CHECKING:
 from erpnext_stripe.operations.create_invoice import run as create_invoice
 
 
-def handle(event: "Event"):
+def handle(event: Event):
 	"""
 	Creates a Sales Invoice from a Stripe Invoice. Submit. Attach PDF.
 	"""

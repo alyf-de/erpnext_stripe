@@ -18,7 +18,7 @@ from erpnext_stripe.utils import (
 )
 
 
-def run(stripe_customer: "StripeCustomer"):
+def run(stripe_customer: StripeCustomer):
 	if frappe.db.exists("Lead", {"stripe_id": stripe_customer.id}):
 		return
 

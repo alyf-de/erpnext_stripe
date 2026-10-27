@@ -9,7 +9,7 @@ import frappe
 from erpnext_stripe.operations.create_bank_transaction import run_for_invoice as create_bank_transaction
 
 
-def handle(event: "Event"):
+def handle(event: Event):
 	stripe_invoice = event.data.object
 
 	invoice_name = frappe.db.get_value("Sales Invoice", {"stripe_id": stripe_invoice.id})

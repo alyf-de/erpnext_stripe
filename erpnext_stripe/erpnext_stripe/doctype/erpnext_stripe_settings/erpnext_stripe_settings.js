@@ -85,9 +85,7 @@ frappe.ui.form.on("ERPNext Stripe Settings", {
 					return;
 				}
 
-				const existing_ids = new Set(
-					(frm.doc.tax_configurations || []).map((row) => row.stripe_id)
-				);
+				const existing_ids = new Set((frm.doc.tax_configurations || []).map((row) => row.stripe_id));
 
 				let added = 0;
 				for (const rate of rates) {
@@ -110,9 +108,7 @@ frappe.ui.form.on("ERPNext Stripe Settings", {
 				frm.refresh_field("tax_configurations");
 				frm.dirty();
 				frappe.show_alert({
-					message: __("{0} tax rate(s) added. Set the Account for each and save.", [
-						added,
-					]),
+					message: __("{0} tax rate(s) added. Set the Account for each and save.", [added]),
 					indicator: "green",
 				});
 			})
@@ -494,10 +490,7 @@ function get_invoice_import_message(result) {
 	const skipped = result?.skipped || 0;
 
 	if (skipped) {
-		return __("{0} invoice(s) imported. {1} skipped; check tax configuration.", [
-			imported,
-			skipped,
-		]);
+		return __("{0} invoice(s) imported. {1} skipped; check tax configuration.", [imported, skipped]);
 	}
 
 	return __("{0} invoice(s) imported.", [imported]);

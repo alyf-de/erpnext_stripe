@@ -15,7 +15,7 @@ from frappe.utils import get_system_timezone
 from frappe.utils.data import flt, getdate
 
 
-def run_for_invoice(invoice: "StripeInvoice"):
+def run_for_invoice(invoice: StripeInvoice):
 	charge = _get_charge(invoice)
 	if not charge:
 		return None
@@ -24,8 +24,8 @@ def run_for_invoice(invoice: "StripeInvoice"):
 
 
 def run_for_charge(
-	charge: "Charge",
-	invoice: "StripeInvoice | None" = None,
+	charge: Charge,
+	invoice: StripeInvoice | None = None,
 ):
 	balance_transaction = _get_charge_balance_transaction(charge)
 	if not balance_transaction:
@@ -35,9 +35,9 @@ def run_for_charge(
 
 
 def run(
-	balance_transaction: "BalanceTransaction",
+	balance_transaction: BalanceTransaction,
 	source=None,
-	invoice: "StripeInvoice | None" = None,
+	invoice: StripeInvoice | None = None,
 ):
 	if not getattr(balance_transaction, "id", None):
 		return None
@@ -84,7 +84,7 @@ def run(
 
 
 def _create_legacy_fee_bank_transaction(
-	balance_transaction: "BalanceTransaction",
+	balance_transaction: BalanceTransaction,
 	existing_bank_transaction,
 	bank_account: str,
 	supplier: str | None,
@@ -121,7 +121,7 @@ def _create_legacy_fee_bank_transaction(
 	return fee_transaction
 
 
-def _is_legacy_gross_deposit(balance_transaction: "BalanceTransaction", existing_bank_transaction) -> bool:
+def _is_legacy_gross_deposit(balance_transaction: BalanceTransaction, existing_bank_transaction) -> bool:
 	"""Return whether an existing transaction is a legacy gross deposit without its embedded fee."""
 	return (
 		balance_transaction.amount > 0
@@ -138,7 +138,7 @@ def _get_legacy_fee_transaction_id(balance_transaction_id: str) -> str:
 	return f"erpnext-stripe-embedded-fee:{transaction_hash}"
 
 
-def _get_source(balance_transaction: "BalanceTransaction", source=None):
+def _get_source(balance_transaction: BalanceTransaction, source=None):
 	if source:
 		return source
 
@@ -150,10 +150,10 @@ def _get_source(balance_transaction: "BalanceTransaction", source=None):
 
 
 def _get_bank_transaction_values(
-	balance_transaction: "BalanceTransaction",
+	balance_transaction: BalanceTransaction,
 	bank_account: str,
 	source=None,
-	invoice: "StripeInvoice | None" = None,
+	invoice: StripeInvoice | None = None,
 	supplier: str | None = None,
 ) -> dict:
 	embedded_fee = balance_transaction.amount > 0 and getattr(balance_transaction, "fee", 0) > 0
@@ -186,7 +186,7 @@ def _get_bank_transaction_values(
 	return values
 
 
-def _get_charge(invoice: "StripeInvoice"):
+def _get_charge(invoice: StripeInvoice):
 	charge = getattr(invoice, "charge", None)
 	if charge:
 		return charge
@@ -200,7 +200,7 @@ def _get_charge(invoice: "StripeInvoice"):
 	return getattr(payment_intent, "latest_charge", None)
 
 
-def _get_charge_balance_transaction(charge: "Charge"):
+def _get_charge_balance_transaction(charge: Charge):
 	if isinstance(charge, str):
 		charge = stripe.Charge.retrieve(charge, expand=["balance_transaction"])
 
@@ -215,15 +215,15 @@ def _get_amount(amount: int) -> float:
 	return flt(amount / 100)
 
 
-def _get_transaction_date(balance_transaction: "BalanceTransaction"):
+def _get_transaction_date(balance_transaction: BalanceTransaction):
 	system_timezone = ZoneInfo(get_system_timezone())
 	return getdate(datetime.fromtimestamp(balance_transaction.created, tz=system_timezone))
 
 
 def _get_description(
-	balance_transaction: "BalanceTransaction",
+	balance_transaction: BalanceTransaction,
 	source=None,
-	invoice: "StripeInvoice | None" = None,
+	invoice: StripeInvoice | None = None,
 ) -> str:
 	description = getattr(balance_transaction, "description", None)
 	if description:
@@ -237,9 +237,9 @@ def _get_description(
 
 
 def _get_reference_number(
-	balance_transaction: "BalanceTransaction",
+	balance_transaction: BalanceTransaction,
 	source=None,
-	invoice: "StripeInvoice | None" = None,
+	invoice: StripeInvoice | None = None,
 ) -> str:
 	reference_number = (
 		_get_invoice_reference(invoice)
@@ -253,12 +253,12 @@ def _get_reference_number(
 	return reference_number
 
 
-def _get_transaction_type(balance_transaction: "BalanceTransaction") -> str:
+def _get_transaction_type(balance_transaction: BalanceTransaction) -> str:
 	transaction_type = getattr(balance_transaction, "reporting_category", None) or balance_transaction.type
 	return f"Stripe {frappe.unscrub(transaction_type)}"
 
 
-def _get_invoice_reference(invoice: "StripeInvoice | None") -> str | None:
+def _get_invoice_reference(invoice: StripeInvoice | None) -> str | None:
 	if not invoice:
 		return None
 
@@ -329,9 +329,9 @@ def _get_charge_invoice_reference(charge) -> str | None:
 
 
 def _get_party(
-	balance_transaction: "BalanceTransaction",
+	balance_transaction: BalanceTransaction,
 	source=None,
-	invoice: "StripeInvoice | None" = None,
+	invoice: StripeInvoice | None = None,
 	supplier: str | None = None,
 ) -> dict | None:
 	if _is_invoice_transaction(source, invoice):
@@ -352,11 +352,11 @@ def _get_party(
 	return None
 
 
-def _is_invoice_transaction(source=None, invoice: "StripeInvoice | None" = None) -> bool:
+def _is_invoice_transaction(source=None, invoice: StripeInvoice | None = None) -> bool:
 	return bool(_get_invoice_reference(invoice) or _get_source_invoice_reference(source))
 
 
-def _is_payout(balance_transaction: "BalanceTransaction") -> bool:
+def _is_payout(balance_transaction: BalanceTransaction) -> bool:
 	reporting_category = getattr(balance_transaction, "reporting_category", None) or ""
 	transaction_type = getattr(balance_transaction, "type", None) or ""
 	return reporting_category == "payout" or transaction_type.startswith("payout")
@@ -364,7 +364,7 @@ def _is_payout(balance_transaction: "BalanceTransaction") -> bool:
 
 def _get_customer_party(
 	source=None,
-	invoice: "StripeInvoice | None" = None,
+	invoice: StripeInvoice | None = None,
 ) -> str | None:
 	stripe_customer_id = getattr(invoice, "customer", None) if invoice else None
 	stripe_customer_id = stripe_customer_id or getattr(source, "customer", None)

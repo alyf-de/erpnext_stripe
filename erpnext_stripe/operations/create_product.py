@@ -9,7 +9,7 @@ import frappe
 import stripe
 
 
-def run(product: "Product"):
+def run(product: Product):
 	if frappe.db.exists("Item", {"stripe_id": product.id}):
 		return
 
@@ -54,7 +54,7 @@ def run(product: "Product"):
 	item_doc.save()
 
 
-def _build_description(product: "Product") -> str:
+def _build_description(product: Product) -> str:
 	description_parts = []
 	if product.description:
 		description_parts.append(product.description.strip())
@@ -123,7 +123,7 @@ def _resolve_docname(doctype: str, value: str | None, fieldname: str) -> str | N
 	return frappe.db.exists(doctype, value) or frappe.db.get_value(doctype, {fieldname: value}, "name")
 
 
-def _get_standard_rate(product: "Product") -> float | None:
+def _get_standard_rate(product: Product) -> float | None:
 	price = _get_default_price(product)
 	if not price:
 		return None
@@ -139,7 +139,7 @@ def _get_standard_rate(product: "Product") -> float | None:
 	return None
 
 
-def _get_default_price(product: "Product"):
+def _get_default_price(product: Product):
 	default_price = getattr(product, "default_price", None)
 	if not default_price:
 		return None
@@ -153,7 +153,7 @@ def _get_default_price(product: "Product"):
 		return None
 
 
-def _apply_package_weight(item_doc: "Item", product: "Product"):
+def _apply_package_weight(item_doc: Item, product: Product):
 	package_dimensions = getattr(product, "package_dimensions", None)
 	if not package_dimensions or getattr(package_dimensions, "weight", None) is None:
 		return

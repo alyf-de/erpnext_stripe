@@ -30,7 +30,7 @@ class MissingTaxAccountError(frappe.ValidationError):
 		self.tax_rate_id = tax_rate_id
 
 
-def run(invoice: "StripeInvoice") -> "SalesInvoice | None":
+def run(invoice: StripeInvoice) -> SalesInvoice | None:
 	if frappe.db.exists("Sales Invoice", {"stripe_id": invoice.id}):
 		return
 
@@ -165,7 +165,7 @@ def _get_rate(line, quantity: float) -> float:
 	frappe.throw(_("Stripe invoice line {0} has no unit amount in its pricing data.").format(line.id))
 
 
-def _set_posting_datetime(invoice_doc: "SalesInvoice", invoice: "StripeInvoice"):
+def _set_posting_datetime(invoice_doc: SalesInvoice, invoice: StripeInvoice):
 	posting_datetime = _get_invoice_posting_datetime(invoice)
 	if not posting_datetime:
 		return
@@ -176,7 +176,7 @@ def _set_posting_datetime(invoice_doc: "SalesInvoice", invoice: "StripeInvoice")
 		invoice_doc.posting_time = posting_datetime.time().replace(microsecond=0)
 
 
-def _get_invoice_posting_datetime(invoice: "StripeInvoice") -> datetime | None:
+def _get_invoice_posting_datetime(invoice: StripeInvoice) -> datetime | None:
 	timestamp = _get_invoice_accounting_timestamp(invoice)
 	if timestamp is None:
 		return None
@@ -185,7 +185,7 @@ def _get_invoice_posting_datetime(invoice: "StripeInvoice") -> datetime | None:
 	return datetime.fromtimestamp(timestamp, tz=system_timezone)
 
 
-def _get_invoice_accounting_timestamp(invoice: "StripeInvoice") -> int | None:
+def _get_invoice_accounting_timestamp(invoice: StripeInvoice) -> int | None:
 	effective_at = getattr(invoice, "effective_at", None)
 	if effective_at is not None:
 		return effective_at
@@ -198,7 +198,7 @@ def _get_invoice_accounting_timestamp(invoice: "StripeInvoice") -> int | None:
 	return getattr(invoice, "created", None)
 
 
-def _set_subscription_period(invoice_doc: "SalesInvoice", invoice: "StripeInvoice"):
+def _set_subscription_period(invoice_doc: SalesInvoice, invoice: StripeInvoice):
 	period = _get_invoice_line_period(invoice)
 	if not period:
 		return
@@ -208,7 +208,7 @@ def _set_subscription_period(invoice_doc: "SalesInvoice", invoice: "StripeInvoic
 	invoice_doc.to_date = _get_timestamp_date(period_end - 1)
 
 
-def _get_invoice_line_period(invoice: "StripeInvoice") -> tuple[int, int] | None:
+def _get_invoice_line_period(invoice: StripeInvoice) -> tuple[int, int] | None:
 	periods = []
 	for line in invoice.lines.data:
 		period = getattr(line, "period", None)
@@ -253,7 +253,7 @@ def _get_tax_config(settings) -> dict:
 
 
 def _get_invoice_tax_rows(
-	invoice: "StripeInvoice",
+	invoice: StripeInvoice,
 	settings,
 ) -> list[tuple[str, object]]:
 	"""Resolve invoice tax rates against ERPNext Stripe Settings.
@@ -386,7 +386,7 @@ def _ensure_sales_item(item_code: str):
 	item_doc.save()
 
 
-def _attach_invoice_pdf(invoice: "StripeInvoice", invoice_doc: "SalesInvoice"):
+def _attach_invoice_pdf(invoice: StripeInvoice, invoice_doc: SalesInvoice):
 	"""Download the Stripe invoice PDF and attach it to the Sales Invoice."""
 	invoice_pdf_url = getattr(invoice, "invoice_pdf", None)
 	if not invoice_pdf_url:
