@@ -84,8 +84,7 @@ def run(invoice: StripeInvoice) -> SalesInvoice | None:
 
 		item_code = frappe.db.get_value("Item", {"stripe_id": product_id})
 		_ensure_sales_item(item_code)
-		quantity = _get_quantity(line)
-		rate = _get_rate(line, quantity)
+		quantity, rate = _get_quantity_and_rate(line)
 
 		invoice_doc.append(
 			"items",
@@ -146,6 +145,26 @@ def _get_product_id(line) -> str:
 		return product_id
 
 	frappe.throw(_("Stripe invoice line {0} has no product in its pricing data.").format(line.id))
+
+
+def _get_quantity_and_rate(line) -> tuple[float, float]:
+	"""ERPNext rounds the rate to the precision of the rate field and calculates the amount as rate * quantity.
+
+	Stripe line totals (e.g. prorations) are not always divisible by the quantity:
+	34.05 for 2 units gives a rate of 17.025. With a rate precision of 2, ERPNext
+	would round it to 17.03 and then calculate an amount of 34.06. In that case,
+	import the line as one unit at the full line amount, so that the amount matches Stripe.
+	"""
+	quantity = _get_quantity(line)
+	rate = _get_rate(line, quantity)
+	rate_precision = frappe.get_precision("Sales Invoice Item", "rate")
+
+	stripe_amount = flt(rate * quantity, 2)
+	erpnext_amount = flt(flt(rate, rate_precision) * quantity, 2)
+	if erpnext_amount != stripe_amount:
+		return 1, stripe_amount
+
+	return quantity, rate
 
 
 def _get_quantity(line) -> float:

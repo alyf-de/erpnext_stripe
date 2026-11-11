@@ -10,6 +10,7 @@ from erpnext_stripe.operations.create_invoice import (
 	_get_invoice_tax_rows,
 	_get_product_id,
 	_get_quantity,
+	_get_quantity_and_rate,
 	_get_rate,
 	_get_tax_rate_id,
 	_set_posting_datetime,
@@ -28,6 +29,19 @@ def _line_item(**values):
 		},
 		None,
 	)
+
+
+def _proration_line(amount, quantity):
+	return _line_item(
+		amount=amount,
+		subtotal=amount,
+		pricing={"price_details": {"product": "prod_current"}, "unit_amount_decimal": None},
+		quantity=quantity,
+	)
+
+
+def _rate_precision(precision):
+	return patch("erpnext_stripe.operations.create_invoice.frappe.get_precision", return_value=precision)
 
 
 def _stripe_object(**values):
@@ -143,6 +157,7 @@ def _run_with_fakes(invoice, invoice_doc):
 		),
 		patch("erpnext_stripe.operations.create_invoice.frappe.new_doc", return_value=invoice_doc),
 		patch("erpnext_stripe.operations.create_invoice.frappe.db", db),
+		_rate_precision(2),
 	):
 		return run(invoice)
 
@@ -334,6 +349,25 @@ class TestCreateInvoice(unittest.TestCase):
 
 		self.assertAlmostEqual(quantity, 2)
 		self.assertAlmostEqual(_get_rate(line, quantity), 17.025)
+
+	def test_imports_line_as_single_quantity_when_rate_precision_is_too_low(self):
+		# 34.05 / 2 = 17.025 would be stored as 17.03, giving an amount of 34.06
+		line = _proration_line(amount=3405, quantity=2)
+
+		with _rate_precision(2):
+			self.assertEqual(_get_quantity_and_rate(line), (1, 34.05))
+
+	def test_keeps_quantity_when_rate_precision_is_high_enough(self):
+		line = _proration_line(amount=3405, quantity=2)
+
+		with _rate_precision(3):
+			self.assertEqual(_get_quantity_and_rate(line), (2, 17.025))
+
+	def test_keeps_quantity_when_rate_is_whole_cents(self):
+		line = _proration_line(amount=3406, quantity=2)
+
+		with _rate_precision(2):
+			self.assertEqual(_get_quantity_and_rate(line), (2, 17.03))
 
 	def test_reads_current_total_tax_shape(self):
 		tax = _stripe_object(
