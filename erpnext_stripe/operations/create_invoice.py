@@ -111,6 +111,20 @@ def run(invoice: StripeInvoice) -> SalesInvoice | None:
 	invoice_doc.set_missing_values()
 	invoice_doc.payment_terms_template = ""
 	invoice_doc.payment_schedule = []
+
+	invoice_doc.calculate_taxes_and_totals()
+	precision = invoice_doc.precision("grand_total")
+	expected_grand_total = flt(invoice.total / 100, precision)
+	actual_grand_total = flt(invoice_doc.grand_total, precision)
+	if actual_grand_total != expected_grand_total:
+		frappe.log_error(
+			title=f"Stripe Invoice: Grand Total Mismatch for {invoice.id}",
+			message=_(
+				"Skipped Stripe invoice {0}: the Sales Invoice grand total {1} does not match the Stripe total {2}."
+			).format(invoice.id, actual_grand_total, expected_grand_total),
+		)
+		return
+
 	invoice_doc.save()
 
 	try:

@@ -81,7 +81,16 @@ class _SalesInvoiceDoc:
 		self.payment_terms_template = "Default Customer Terms"
 		self.payment_schedule = [_stripe_object(due_date="2026-06-14")]
 
+	def calculate_taxes_and_totals(self):
+		net_total = sum(item.qty * item.rate for item in self.items)
+		tax_rate = sum(tax.rate for tax in self.taxes)
+		self.grand_total = net_total * (1 + tax_rate / 100)
+
+	def precision(self, fieldname):
+		return 2
+
 	def save(self):
+		self.saved = True
 		self.saved_due_date = self.due_date
 		self.saved_payment_terms_template = self.payment_terms_template
 		self.saved_payment_schedule = self.payment_schedule
@@ -90,53 +99,61 @@ class _SalesInvoiceDoc:
 		self.submitted = True
 
 
+def _stripe_invoice(total=1000, due_date="2026-06-30"):
+	return _stripe_object(
+		id="in_test",
+		number="SI-STRIPE-TEST",
+		total=total,
+		due_date=due_date,
+		customer="cus_test",
+		lines={
+			"data": [
+				{
+					"id": "il_test",
+					"pricing": {
+						"price_details": {"product": "prod_test"},
+						"unit_amount_decimal": "1000",
+					},
+					"quantity": 1,
+				}
+			]
+		},
+	)
+
+
+def _run_with_fakes(invoice, invoice_doc):
+	def exists(doctype, filters):
+		return doctype == "Item"
+
+	def get_value(doctype, filters, *args, **kwargs):
+		if doctype == "Customer":
+			return "CUST-001"
+		if doctype == "Item":
+			return "ITEM-001"
+
+	db = SimpleNamespace(exists=exists, get_value=get_value)
+
+	with (
+		patch("erpnext_stripe.operations.create_invoice._ensure_customer"),
+		patch("erpnext_stripe.operations.create_invoice._ensure_sales_item"),
+		patch("erpnext_stripe.operations.create_invoice._get_invoice_tax_rows", return_value=[]),
+		patch(
+			"erpnext_stripe.operations.create_invoice.frappe.get_single",
+			return_value=_stripe_object(project="Stripe Project", price_list="Standard Selling"),
+		),
+		patch("erpnext_stripe.operations.create_invoice.frappe.new_doc", return_value=invoice_doc),
+		patch("erpnext_stripe.operations.create_invoice.frappe.db", db),
+	):
+		return run(invoice)
+
+
 class TestCreateInvoice(unittest.TestCase):
 	def test_preserves_stripe_due_date_without_customer_payment_terms(self):
 		invoice_doc = _SalesInvoiceDoc()
 		stripe_due_date = "2026-06-30"
-		invoice = _stripe_object(
-			id="in_test",
-			number="SI-STRIPE-TEST",
-			total=1000,
-			due_date=stripe_due_date,
-			customer="cus_test",
-			lines={
-				"data": [
-					{
-						"id": "il_test",
-						"pricing": {
-							"price_details": {"product": "prod_test"},
-							"unit_amount_decimal": "1000",
-						},
-						"quantity": 1,
-					}
-				]
-			},
-		)
+		invoice = _stripe_invoice(due_date=stripe_due_date)
 
-		def exists(doctype, filters):
-			return doctype == "Item"
-
-		def get_value(doctype, filters, *args, **kwargs):
-			if doctype == "Customer":
-				return "CUST-001"
-			if doctype == "Item":
-				return "ITEM-001"
-
-		db = SimpleNamespace(exists=exists, get_value=get_value)
-
-		with (
-			patch("erpnext_stripe.operations.create_invoice._ensure_customer"),
-			patch("erpnext_stripe.operations.create_invoice._ensure_sales_item"),
-			patch("erpnext_stripe.operations.create_invoice._get_invoice_tax_rows", return_value=[]),
-			patch(
-				"erpnext_stripe.operations.create_invoice.frappe.get_single",
-				return_value=_stripe_object(project="Stripe Project", price_list="Standard Selling"),
-			),
-			patch("erpnext_stripe.operations.create_invoice.frappe.new_doc", return_value=invoice_doc),
-			patch("erpnext_stripe.operations.create_invoice.frappe.db", db),
-		):
-			result = run(invoice)
+		result = _run_with_fakes(invoice, invoice_doc)
 
 		self.assertEqual(result, invoice_doc)
 		self.assertEqual(invoice_doc.payment_terms_template_before_missing, "")
@@ -144,6 +161,17 @@ class TestCreateInvoice(unittest.TestCase):
 		self.assertEqual(invoice_doc.saved_payment_terms_template, "")
 		self.assertEqual(invoice_doc.saved_payment_schedule, [])
 		self.assertEqual(invoice_doc.ignore_default_payment_terms_template, 1)
+
+	def test_skips_invoice_when_grand_total_differs_from_stripe_total(self):
+		invoice_doc = _SalesInvoiceDoc()
+		invoice = _stripe_invoice(total=1190)
+
+		with patch("erpnext_stripe.operations.create_invoice.frappe.log_error") as log_error:
+			result = _run_with_fakes(invoice, invoice_doc)
+
+		self.assertIsNone(result)
+		self.assertFalse(hasattr(invoice_doc, "saved"))
+		log_error.assert_called_once()
 
 	def test_sets_posting_datetime_from_effective_at_in_system_timezone(self):
 		invoice = _stripe_object(
