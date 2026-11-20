@@ -6,6 +6,7 @@ if TYPE_CHECKING:
 
 import frappe
 import stripe
+from erpnext.selling.doctype.customer.customer import parse_full_name
 
 from erpnext_stripe.utils import (
 	get_country_name_by_code,
@@ -39,7 +40,8 @@ def _update_lead(stripe_customer):
 	lead_doc = frappe.get_doc("Lead", lead_name)
 
 	if resolved_name := get_stripe_customer_name(stripe_customer, fallback_to_identifier=False):
-		lead_doc.lead_name = resolved_name
+		# Lead.validate rebuilds lead_name from the name parts
+		lead_doc.first_name, lead_doc.middle_name, lead_doc.last_name = parse_full_name(resolved_name)
 
 	if hasattr(stripe_customer, "business_name") and stripe_customer.business_name:
 		lead_doc.company_name = stripe_customer.business_name
