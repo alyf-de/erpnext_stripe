@@ -15,14 +15,6 @@ from frappe.utils import get_system_timezone
 from frappe.utils.data import flt, getdate
 
 
-def run_for_invoice(invoice: StripeInvoice):
-	charge = _get_charge(invoice)
-	if not charge:
-		return None
-
-	return run_for_charge(charge, invoice=invoice)
-
-
 def run_for_charge(
 	charge: Charge,
 	invoice: StripeInvoice | None = None,
@@ -184,20 +176,6 @@ def _get_bank_transaction_values(
 		values.update(party)
 
 	return values
-
-
-def _get_charge(invoice: StripeInvoice):
-	charge = getattr(invoice, "charge", None)
-	if charge:
-		return charge
-
-	payment_intent = getattr(invoice, "payment_intent", None)
-	if not payment_intent:
-		return None
-
-	payment_intent_id = payment_intent if isinstance(payment_intent, str) else payment_intent.id
-	payment_intent = stripe.PaymentIntent.retrieve(payment_intent_id, expand=["latest_charge"])
-	return getattr(payment_intent, "latest_charge", None)
 
 
 def _get_charge_balance_transaction(charge: Charge):
